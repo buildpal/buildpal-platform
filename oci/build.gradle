@@ -1,0 +1,5 @@
+javaModule.name = "io.buildpal.oci"
+
+dependencies {
+    api project(":core")
+}

@@ -1,0 +1,10 @@
+javaModule.name = "io.buildpal.workspace"
+
+dependencies {
+    implementation "io.vertx:vertx-lang-js:$vertxVersion"
+    implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+    implementation "org.eclipse.jgit:org.eclipse.jgit:$jGitVersion"
+    implementation "com.perforce:p4java:$p4JavaVersion"
+
+    api project(":core")
+}

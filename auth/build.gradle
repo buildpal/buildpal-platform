@@ -1,0 +1,9 @@
+javaModule.name = "io.buildpal.auth"
+
+dependencies {
+    implementation "io.vertx:vertx-auth-jwt:$vertxVersion"
+    implementation "io.vertx:vertx-web:$vertxVersion"
+    implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+
+    api project(":core")
+}

@@ -1,0 +1,19 @@
+javaModule.name = "io.buildpal.node"
+
+dependencies {
+    implementation group: "io.netty", name: "netty-transport-native-kqueue", version: "$nettyVersion", classifier: "osx-x86_64"
+    // TODO: Add linux epoll jar dependency
+
+    implementation "io.vertx:vertx-auth-jwt:$vertxVersion"
+    implementation "io.vertx:vertx-web:$vertxVersion"
+
+    implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+    //implementation "org.slf4j:slf4j-log4j12:$slf4jVersion"
+
+    api project(":auth")
+    api project(":core")
+    api project(":db")
+    api project(":workspace")
+    api project(":oci")
+}

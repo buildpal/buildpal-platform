@@ -1,0 +1,38 @@
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.3.1'
+}
+
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+
+    dependencies {
+        classpath "gradle.plugin.org.gradle.java:experimental-jigsaw:0.1.1"
+    }
+}
+
+subprojects {
+    apply plugin: "java-library"
+    apply plugin: "org.gradle.java.experimental-jigsaw"
+
+    group "io.buildpal"
+    version "2.0-SNAPSHOT"
+
+    sourceCompatibility = 1.9
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven {
+            url "https://oss.sonatype.org/content/repositories/snapshots"
+        }
+    }
+
+    dependencies {
+        implementation "io.vertx:vertx-core:$vertxVersion"
+        testImplementation "junit:junit:4.12"
+    }
+}

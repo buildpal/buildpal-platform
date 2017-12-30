@@ -1,0 +1,8 @@
+javaModule.name = "io.buildpal.db"
+
+dependencies {
+    implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
+
+    api project(":auth")
+    api project(":core")
+}
