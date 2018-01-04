@@ -19,11 +19,13 @@ module io.buildpal.auth {
     exports io.buildpal.auth.vault;
     exports io.buildpal.auth.util;
 
-    requires vertx.core;
     requires java.naming;
+
+    requires vertx.core;
     requires vertx.auth.jwt;
-    requires org.apache.commons.lang3;
     requires vertx.web;
+
+    requires org.apache.commons.lang3;
 
     requires io.buildpal.core;
 }

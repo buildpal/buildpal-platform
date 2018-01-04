@@ -17,15 +17,14 @@
 module io.buildpal.node {
     exports io.buildpal.node;
     exports io.buildpal.node.engine;
-    uses io.buildpal.core.pipeline.Plugin;
 
-    requires static io.netty.transport.kqueue;
-    requires jdk.unsupported;
+    uses io.buildpal.core.pipeline.Plugin;
 
     requires vertx.core;
     requires vertx.auth.common;
     requires vertx.auth.jwt;
     requires vertx.web;
+
     requires org.apache.commons.lang3;
 
     requires io.buildpal.auth;

@@ -20,10 +20,16 @@ module io.buildpal.workspace {
     provides io.buildpal.core.pipeline.Plugin
             with io.buildpal.workspace.WorkspaceVerticle, io.buildpal.workspace.ScriptVerticle;
 
+    requires java.scripting;
+    requires jdk.scripting.nashorn;
+
     requires vertx.core;
     requires vertx.lang.js;
+
     requires org.apache.commons.lang3;
+
     requires org.eclipse.jgit;
+
     requires p4java;
 
     requires io.buildpal.core;

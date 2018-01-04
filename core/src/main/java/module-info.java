@@ -21,12 +21,13 @@ module io.buildpal.core {
     exports io.buildpal.core.domain.validation;
     exports io.buildpal.core.pipeline;
     exports io.buildpal.core.pipeline.event;
-
     exports io.buildpal.core.process;
     exports io.buildpal.core.util;
     exports io.buildpal.core.query;
 
     requires vertx.core;
+
     requires org.apache.commons.lang3;
+
     requires antlr4.runtime;
 }

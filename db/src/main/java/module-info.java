@@ -19,6 +19,7 @@ module io.buildpal.db {
     exports io.buildpal.db.file;
 
     requires vertx.core;
+
     requires org.apache.commons.lang3;
 
     requires io.buildpal.core;

@@ -18,7 +18,12 @@ module io.buildpal.oci {
     exports io.buildpal.oci;
     provides io.buildpal.core.pipeline.Plugin with io.buildpal.oci.DockerClientVerticle;
 
+    requires jdk.unsupported;
+
     requires vertx.core;
+
+    requires static io.netty.transport.epoll;
+    //requires static io.netty.transport.kqueue;
 
     requires io.buildpal.core;
 }

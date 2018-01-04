@@ -265,7 +265,7 @@ public class DockerClientVerticle extends Plugin {
         }
 
         config.put("WorkingDir", workspace.getPhasesPath());
-        config.put("Cmd", String.format(DOT_SLASH, phase.getMainScript()));
+        config.put("Cmd", String.format(DOT_SLASH, phase.getMainScriptFile()));
 
         config.put("HostConfig", new JsonObject().put("Binds", binds));
 
