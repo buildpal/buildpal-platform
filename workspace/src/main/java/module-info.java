@@ -32,5 +32,6 @@ module io.buildpal.workspace {
 
     requires p4java;
 
+    requires io.buildpal.auth;
     requires io.buildpal.core;
 }

@@ -16,10 +16,13 @@
 
 package io.buildpal.core.config;
 
+import io.vertx.core.json.JsonObject;
+
 /**
- * Shared constants across all packages.
+ * Shared constants across all modules.
  */
 public class Constants {
+    public static final JsonObject EMPTY_JSON = new JsonObject();
 
     public static final String SYSTEM_FOLDER_PATH = "systemFolderPath";
     public static final String DATA_FOLDER_PATH = "dataFolderPath";
@@ -46,6 +49,23 @@ public class Constants {
     public static final String SUCCESS = "success";
 
     public static final String BUILD_UPDATE_ADDRESS = "build.update";
+    public static final String DELETE_CONTAINERS_ADDRESS = "oci.containers.delete";
+    public static final String KILL_CONTAINERS_ADDRESS = "oci.containers.kill";
 
     public final static String BUILDPAL_DATA_VOLUME = "buildpal-data";
+
+    public static final String NODE = "node";
+    public static final String DOCKER_VERTICLE = "dockerVerticle";
+
+    public static final String HTTP_PORT = "httpPort";
+    public static final String HOST = "host";
+    public static final String IS_SERVER = "isServer";
+
+    public static int getDockerVerticleHttpPort(JsonObject config, int defaultValue) {
+        return config.getJsonObject(DOCKER_VERTICLE, EMPTY_JSON).getInteger(HTTP_PORT, defaultValue);
+    }
+
+    public static String getDockerVerticleHostOrIP(JsonObject config, String defaultValue) {
+        return config.getJsonObject(DOCKER_VERTICLE, EMPTY_JSON).getString(HOST, defaultValue);
+    }
 }

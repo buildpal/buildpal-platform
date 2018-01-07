@@ -6,5 +6,6 @@ dependencies {
     implementation "org.eclipse.jgit:org.eclipse.jgit:$jGitVersion"
     implementation "com.perforce:p4java:$p4JavaVersion"
 
+    api project(":auth")
     api project(":core")
 }

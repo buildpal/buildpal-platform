@@ -41,6 +41,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.buildpal.core.config.Constants.BUILD_UPDATE_ADDRESS;
 import static io.buildpal.core.domain.Build.BUILD;
 
+/**
+ * Coordinates a pipeline instance's state transitions and invokes the plugins registered at
+ * the various states.
+ *
+ * IMPORTANT: This class is marked {@link Shareable} as we expect the {@link Flow} instances
+ * to be accessed by a single {@link Engine} verticle per vert.x instance.
+ */
 class Flow implements Shareable {
     static final String END = "flow.end";
 
@@ -70,6 +77,8 @@ class Flow implements Shareable {
     private final Queue<List<Phase>> stagesQueue;
     private final Map<Integer, AtomicInteger> phasesCounter;
 
+    private boolean aborted;
+
     Flow(JsonObject message,
          List<Plugin> setupPlugins,
          List<Plugin> tearDownPlugins,
@@ -90,6 +99,8 @@ class Flow implements Shareable {
 
         this.stagesQueue = new LinkedList<>();
         this.phasesCounter = new HashMap<>();
+
+        this.aborted = false;
     }
 
     public Build getBuild() {
@@ -103,8 +114,28 @@ class Flow implements Shareable {
         logger.info("Pipeline instance started: " + build.getID());
     }
 
+    public List<String> abort() {
+        if (aborted) {
+            logger.warn("Pipeline instance was previously aborted: " + build.getID());
+            return List.of();
+        }
+
+        aborted = true;
+        List<String> containerIDs = build.markForAbort();
+
+        logger.info("Pipeline instance aborted: " + build.getID());
+
+        return containerIDs;
+    }
+
     public void process(Event event) {
         State currentState = statesQueue.peek();
+
+        if (aborted && currentState != State.TEAR_DOWN) {
+            // If the flow was marked as aborted, move to the tear-down stage.
+            nextState();
+            return;
+        }
 
         switch (currentState) {
             case SETUP:
@@ -214,19 +245,19 @@ class Flow implements Shareable {
             int counter = pluginCounter.incrementAndGet();
 
             if (counter == tearDownPlugins.size()) {
-                build.markForComplete();
 
-                // Update DB again.
-                eb.send(BUILD_UPDATE_ADDRESS, build.json());
+                if (!aborted) {
+                    build.markForComplete();
+
+                    // Update DB again.
+                    eb.send(BUILD_UPDATE_ADDRESS, build.json());
+                }
 
                 // Notify flow end event.
                 eb.send(END, build.json());
 
-                logger.info("Pipeline instance completed: " + build.getID());
-
             } else {
                 int order = tearDownPlugins.get(counter).order();
-                logger.info("Order: " + order);
                 eb.send(CommandKey.TEAR_DOWN.getAddress(order), tearDownCommand());
             }
 
@@ -246,7 +277,7 @@ class Flow implements Shareable {
     }
 
     private boolean updateBuildFromEvent(Event event) {
-        if (event == null) return true;
+        if (event == null || aborted) return true;
 
         // Refresh build from event payload.
         if (event.getStatusCode() == 200) {
@@ -299,6 +330,14 @@ class Flow implements Shareable {
 
             if (eventPhase.hasContainerID()) {
                 stagePhase.setContainerID(eventPhase.getContainerID());
+
+                if (eventPhase.hasContainerHost()) {
+                    stagePhase.setContainerHost(eventPhase.getContainerHost());
+                }
+
+                if (eventPhase.hasContainerPort()) {
+                    stagePhase.setContainerPort(eventPhase.getContainerPort());
+                }
             }
 
             return true;

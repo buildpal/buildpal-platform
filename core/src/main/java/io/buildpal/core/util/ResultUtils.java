@@ -90,6 +90,10 @@ public class ResultUtils {
         return result;
     }
 
+    public static JsonObject getEntity(JsonObject result) {
+        return result.getJsonObject(ITEM);
+    }
+
     public static JsonObject addEntities(JsonObject result, List<JsonObject> entities) {
         return result.put(ITEMS, entities);
     }

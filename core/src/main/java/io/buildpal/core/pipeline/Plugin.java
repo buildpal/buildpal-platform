@@ -52,7 +52,7 @@ public abstract class Plugin extends AbstractVerticle {
             }
         }
 
-        startFuture.complete();
+        starting(startFuture);
     }
 
     public abstract Set<CommandKey> commandKeysToRegister();
@@ -61,6 +61,10 @@ public abstract class Plugin extends AbstractVerticle {
 
     public int order() {
         return 100;
+    }
+
+    protected void starting(Future<Void> startFuture) throws Exception {
+        startFuture.complete();
     }
 
     protected Handler<Message<JsonObject>> setupHandler(EventBus eb) {

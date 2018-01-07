@@ -25,7 +25,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import static io.buildpal.core.domain.Phase.CONTAINER_HOST;
 import static io.buildpal.core.domain.Phase.CONTAINER_ID;
+import static io.buildpal.core.domain.Phase.CONTAINER_PORT;
 
 public class Build extends Entity<Build> {
     public static final String BUILD = "build";
@@ -267,6 +269,20 @@ public class Build extends Entity<Build> {
         return containerIDs;
     }
 
+    public BuildPhase findPhase(String containerID) {
+        JsonArray phases = getPhases();
+
+        for (int p=0; p<phases.size(); p++) {
+            BuildPhase phase = new BuildPhase(phases.getJsonObject(p));
+
+            if (containerID.equals(phase.getContainerID())) {
+                return phase;
+            }
+        }
+
+        return null;
+    }
+
     public Build updatePhase(Phase phase) {
         JsonArray phases = getPhases();
 
@@ -274,9 +290,19 @@ public class Build extends Entity<Build> {
             BuildPhase buildPhase = new BuildPhase(phases.getJsonObject(p));
 
             if (phase.getID().equals(buildPhase.getID())) {
-                buildPhase
-                        .setStatus(phase.getStatus())
-                        .setContainerID(phase.getContainerID());
+                buildPhase.setStatus(phase.getStatus());
+
+                if (phase.hasContainerID()) {
+                    buildPhase.setContainerID(phase.getContainerID());
+                }
+
+                if (phase.hasContainerHost()) {
+                    buildPhase.setContainerHost(phase.getContainerHost());
+                }
+
+                if (phase.hasContainerPort()) {
+                    buildPhase.setContainerPort(phase.getContainerPort());
+                }
                 break;
             }
         }
@@ -326,12 +352,56 @@ public class Build extends Entity<Build> {
             return this;
         }
 
+        public String getContainerHost() {
+            return jsonObject.getString(CONTAINER_HOST);
+        }
+
+        public BuildPhase setContainerHost(String containerHost) {
+            jsonObject.put(CONTAINER_HOST, containerHost);
+            return this;
+        }
+
+        public boolean hasContainerHost() {
+            return jsonObject.containsKey(CONTAINER_HOST) && StringUtils.isNotBlank(getContainerHost());
+        }
+
+        public int getContainerPort() {
+            return jsonObject.getInteger(CONTAINER_PORT);
+        }
+
+        public BuildPhase setContainerPort(int containerPort) {
+            jsonObject.put(CONTAINER_PORT, containerPort);
+            return this;
+        }
+
+        public boolean hasContainerPort() {
+            try {
+                return jsonObject.containsKey(CONTAINER_PORT) && getContainerPort() > -1;
+
+            } catch (Exception ignore) {
+                return false;
+            }
+        }
+
         public static BuildPhase fromPhase(Phase phase) {
-            return new Build.BuildPhase()
+            BuildPhase buildPhase = new Build.BuildPhase()
                     .setID(phase.getID())
                     .setName(phase.getName())
-                    .setStatus(phase.getStatus())
-                    .setContainerID(phase.getContainerID());
+                    .setStatus(phase.getStatus());
+
+            if (phase.hasContainerID()) {
+                buildPhase.setContainerID(phase.getContainerID());
+            }
+
+            if (phase.hasContainerHost()) {
+                buildPhase.setContainerHost(phase.getContainerHost());
+            }
+
+            if (phase.hasContainerPort()) {
+                buildPhase.setContainerPort(phase.getContainerPort());
+            }
+
+            return buildPhase;
         }
     }
 

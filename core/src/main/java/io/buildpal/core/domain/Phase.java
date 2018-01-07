@@ -30,6 +30,9 @@ import static org.apache.commons.lang3.StringUtils.EMPTY;
 public class Phase extends Entity<Phase> {
     static final String CONTAINER_ID = "containerID";
 
+    static final String CONTAINER_HOST = "containerHost";
+    static final String CONTAINER_PORT = "containerPort";
+
     private static final String INDEX = "index";
     private static final String STATUS = "status";
 
@@ -92,6 +95,37 @@ public class Phase extends Entity<Phase> {
 
     public boolean hasContainerID() {
         return jsonObject.containsKey(CONTAINER_ID) && StringUtils.isNotBlank(getContainerID());
+    }
+
+    public String getContainerHost() {
+        return jsonObject.getString(CONTAINER_HOST);
+    }
+
+    public Phase setContainerHost(String containerHost) {
+        jsonObject.put(CONTAINER_HOST, containerHost);
+        return this;
+    }
+
+    public boolean hasContainerHost() {
+        return jsonObject.containsKey(CONTAINER_HOST) && StringUtils.isNotBlank(getContainerHost());
+    }
+
+    public int getContainerPort() {
+        return jsonObject.getInteger(CONTAINER_PORT);
+    }
+
+    public Phase setContainerPort(int containerPort) {
+        jsonObject.put(CONTAINER_PORT, containerPort);
+        return this;
+    }
+
+    public boolean hasContainerPort() {
+        try {
+            return jsonObject.containsKey(CONTAINER_PORT) && getContainerPort() > -1;
+
+        } catch (Exception ignore) {
+            return false;
+        }
     }
 
     public ContainerArgs getContainerArgs() {

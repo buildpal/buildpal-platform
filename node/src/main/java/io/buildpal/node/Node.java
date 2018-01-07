@@ -22,6 +22,7 @@ import io.buildpal.core.domain.Project;
 import io.buildpal.core.domain.Repository;
 import io.buildpal.core.domain.User;
 import io.buildpal.core.util.Utils;
+import io.buildpal.core.util.VertxUtils;
 import io.buildpal.db.DbManager;
 import io.buildpal.db.DbManagers;
 import io.buildpal.node.auth.LoginAuthHandler;
@@ -30,18 +31,14 @@ import io.buildpal.node.engine.Engine;
 import io.buildpal.node.router.BaseRouter;
 import io.buildpal.node.router.BuildRouter;
 import io.buildpal.node.router.CrudRouter;
-import io.buildpal.node.router.LogRouter;
 import io.buildpal.node.router.PipelineRouter;
 import io.buildpal.node.router.SecretRouter;
 import io.buildpal.node.router.StaticRouter;
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.CompositeFuture;
-import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
-import io.vertx.core.Handler;
+import io.vertx.core.Verticle;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
-import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -49,11 +46,7 @@ import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.handler.CookieHandler;
 import io.vertx.ext.web.handler.CorsHandler;
-import io.vertx.ext.web.handler.SessionHandler;
-import io.vertx.ext.web.sstore.LocalSessionStore;
-import io.vertx.ext.web.sstore.SessionStore;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -63,6 +56,10 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.buildpal.core.config.Constants.ADMIN;
+import static io.buildpal.core.config.Constants.EMPTY_JSON;
+import static io.buildpal.core.config.Constants.HTTP_PORT;
+import static io.buildpal.core.config.Constants.IS_SERVER;
+import static io.buildpal.core.config.Constants.NODE;
 import static io.buildpal.core.util.ResultUtils.failed;
 import static io.buildpal.node.router.CrudRouter.API_PATH;
 
@@ -70,27 +67,31 @@ public class Node extends AbstractVerticle {
     private static final Logger logger = LoggerFactory.getLogger(Node.class);
 
     private static final String WILDCARD = "*";
-    private static final String SERVER = "server";
-    private static final String HTTP_PORT = "httpPort";
-    private static final String HTTPS_PORT = "httpsPort";
     private static final String CORS_ENABLED = "corsEnabled";
     private static final String CORS_ORIGIN_PATTERN = "corsOriginPattern";
     private static final String BODY_LIMIT = "bodyLimit";
 
-    private Handler<ServerWebSocket> webSocketHandler = null;
     private Router mainRouter;
     private DbManagers dbManagers;
 
     @Override
-    public void start(Future<Void> startFuture) throws Exception {
-        dbManagers = new DbManagers(vertx, config());
+    public void start(Future<Void> startFuture) {
+        boolean isServer = isServer(config());
 
-        Future<Void> dbFuture = Future.future();
-        dbFuture
-                .compose(d -> deployVerticles())
-                .compose(s -> serve(startFuture), startFuture);
+        if (isServer) {
+            dbManagers = new DbManagers(vertx, config());
 
-        configureDb(dbFuture);
+            Future<Void> dbFuture = Future.future();
+            dbFuture
+                    .compose(d -> deployVerticles())
+                    .compose(s -> serve(startFuture), startFuture);
+
+            configureDb(dbFuture);
+
+        } else {
+            deployVerticles()
+                    .compose(d -> startFuture.complete(), startFuture);
+        }
     }
 
     private Router getMainRouter() {
@@ -99,18 +100,17 @@ public class Node extends AbstractVerticle {
 
     private void serve(Future<Void> startFuture) {
         try {
-            JsonObject serverConfig = config().getJsonObject(SERVER);
+            JWTAuthOptions jwtAuthOptions = new JWTAuthOptions(AuthConfigUtils.getAuthConfig(config()));
+            JWTAuth jwtAuth = JWTAuth.create(vertx, jwtAuthOptions);
 
-            JWTAuth jwtAuth = JWTAuth.create(vertx, new JWTAuthOptions(AuthConfigUtils.getAuthConfig(config())));
+            JsonObject serverConfig = config().getJsonObject(NODE);
 
             configureMainRouter(serverConfig);
             configureCors(serverConfig);
-            configureSession();
 
             // Order is important. Keep an eye on sub routes and main routes.
             configureLoginLogout(jwtAuth);
             configureApi(jwtAuth);
-            //configureEventBus();
             configureStaticFiles();
 
             createAdminAndListen(startFuture);
@@ -167,34 +167,18 @@ public class Node extends AbstractVerticle {
         final AtomicInteger counter = new AtomicInteger();
         final int total = managers.size();
 
-        managers.forEach(manager -> {
+        managers.forEach(manager -> manager.init(config(), ih -> {
+            inits.add(ih.succeeded());
 
-            manager.init(config(), ih -> {
-                inits.add(ih.succeeded());
+            if (counter.incrementAndGet() == total) {
+                if (inits.stream().anyMatch(initialized -> !initialized)) {
+                    dbFuture.fail("Unable to initialize one or more db managers.");
 
-                if (counter.incrementAndGet() == total) {
-                    if (inits.stream().anyMatch(initialized -> !initialized)) {
-                        dbFuture.fail("Unable to initialize one or more db managers.");
-
-                    } else {
-                        dbFuture.complete();
-                    }
+                } else {
+                    dbFuture.complete();
                 }
-            });
-        });
-    }
-
-    private void configureSession() {
-        Router router = getMainRouter();
-
-        // 1) Create a cookie handler for all html requests.
-        CookieHandler cookieHandler = CookieHandler.create();
-        router.route().handler(cookieHandler);
-
-        // 2) Create a session handler for all html requests.
-        SessionStore sessionStore = LocalSessionStore.create(vertx);
-        SessionHandler sessionHandler = SessionHandler.create(sessionStore).setNagHttps(false);
-        router.route().handler(sessionHandler);
+            }
+        }));
     }
 
     private void configureLoginLogout(JWTAuth jwtAuth)  {
@@ -229,8 +213,6 @@ public class Node extends AbstractVerticle {
         mainRouter.mountSubRouter(API_PATH,
                 new BuildRouter(vertx, jwtAuth, null, dbManagers.getBuildManager())
                         .getRouter());
-
-        mainRouter.mountSubRouter(API_PATH, new LogRouter(vertx, dbManagers.getBuildManager()).getRouter());
     }
 
     private void configureStaticFiles() {
@@ -270,53 +252,35 @@ public class Node extends AbstractVerticle {
     }
 
     private void listen(Future<Void> startFuture) {
-        JsonObject serverConfig = config().getJsonObject(SERVER);
+        HttpServer httpServer = vertx.createHttpServer()
+                .requestHandler(getMainRouter()::accept);
 
-        int port = serverConfig.getInteger(HTTP_PORT, 8080);
+        httpServer.listen(getNodeHttpPort(config()), lh -> {
+            if (lh.succeeded()) {
+                logger.info(String.format("Buildpal server running on port: %d", lh.result().actualPort()));
 
-        HttpServer httpServer = vertx.createHttpServer().requestHandler(getMainRouter()::accept);
+                startFuture.complete();
 
-        if (webSocketHandler != null) {
-            httpServer.websocketHandler(webSocketHandler);
-        }
-
-        logger.info("Created server...");
-
-        httpServer.listen(port);
-        logger.info("Buildpal server running on port: " + port + "\n\n");
-
-        startFuture.complete();
+            } else {
+                startFuture.fail(lh.cause());
+            }
+        });
     }
 
     private Future<Void> deployVerticles() {
         Future<Void> deployFuture = Future.future();
+        List<Verticle> verticles;
 
-        DeploymentOptions options = new DeploymentOptions().setConfig(config());
+        if (isServer(config())) {
+            verticles = List.of(new JCEVaultVerticle(), new Engine());
 
-        CompositeFuture.all(
-                //deploy(WorkspaceVerticle.class.getName(), options),
-                deploy(JCEVaultVerticle.class.getName(), options),
-                deploy(Engine.class.getName(), options)
+        } else {
+            verticles = List.of(new Engine());
+        }
 
-        ).setHandler(r -> {
-            if (r.succeeded()) {
-                deployFuture.complete();
-
-            } else {
-                deployFuture.fail(r.cause());
-            }
-        });
-
-        return deployFuture;
-    }
-
-    private Future<String> deploy(String name, DeploymentOptions options) {
-        Future<String> deployFuture = Future.future();
-
-        vertx.deployVerticle(name, options, dh -> {
+        VertxUtils.deployVerticles(vertx, verticles, config(), dh -> {
             if (dh.succeeded()) {
-                logger.info("Deployed: " + name);
-                deployFuture.complete(dh.result());
+                deployFuture.complete();
 
             } else {
                 deployFuture.fail(dh.cause());
@@ -324,5 +288,13 @@ public class Node extends AbstractVerticle {
         });
 
         return deployFuture;
+    }
+
+    private int getNodeHttpPort(JsonObject config) {
+        return config.getJsonObject(NODE, EMPTY_JSON).getInteger(HTTP_PORT, 8080);
+    }
+
+    private boolean isServer(JsonObject config) {
+        return config.getJsonObject(NODE, EMPTY_JSON).getBoolean(IS_SERVER, false);
     }
 }

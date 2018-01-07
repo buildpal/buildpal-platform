@@ -32,8 +32,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import static io.buildpal.auth.vault.VaultService.RETRIEVE_DATA_ADDRESS;
 import static io.buildpal.core.config.Constants.DATA_FOLDER_PATH;
 import static io.buildpal.core.domain.Entity.ID;
+import static io.buildpal.core.domain.Entity.NAME;
 import static io.buildpal.core.util.FileUtils.SLASH;
 import static io.buildpal.core.util.FileUtils.slashify;
 
@@ -108,7 +110,7 @@ public class WorkspaceVerticle extends Plugin {
                         FileUtils.chmod757(workspace.getUserPath());
                     }
 
-                    syncWorkspace(build, workspace, build.getRepository(), setupEndEvent);
+                    syncWorkspaceWithCreds(build, workspace, build.getRepository(), setupEndEvent);
 
                 } catch (Exception ex) {
                     syncError(workspace, setupEndEvent, ex);
@@ -149,7 +151,7 @@ public class WorkspaceVerticle extends Plugin {
 
                     if (!fs.existsBlocking(childWorkspace.getPath())) {
                         syncInProgress = true;
-                        syncWorkspaceForPhase(build, childWorkspace, childRepo, phaseEndEvent);
+                        syncWorkspaceForPhaseWithCreds(build, repository, childWorkspace, childRepo, phaseEndEvent);
 
                     } else {
                         logger.info("Child repo already synced: " + childRepo.getName());
@@ -247,6 +249,33 @@ public class WorkspaceVerticle extends Plugin {
         FileUtils.chmod757(workspace.getPath());
     }
 
+    private void syncWorkspaceWithCreds(Build build, Workspace workspace, Repository repository, Event setupEndEvent) {
+        if (repository != null && repository.hasSecret()) {
+
+            JsonObject data = new JsonObject().put(NAME, repository.getSecret().getName());
+
+            vertx.eventBus().<JsonObject>send(RETRIEVE_DATA_ADDRESS, data, rh -> {
+                if (rh.succeeded()) {
+                    JsonObject secretJson = rh.result().body();
+
+                    if (secretJson != null) {
+                        build.setRepositorySecret(secretJson);
+                        syncWorkspace(build, workspace, repository, setupEndEvent);
+
+                    } else {
+                        syncError(workspace, setupEndEvent, new Exception("Unable to retrieve data from vault."));
+                    }
+
+                } else {
+                    syncError(workspace, setupEndEvent, rh.cause());
+                }
+            });
+
+        } else {
+            syncWorkspace(build, workspace, repository, setupEndEvent);
+        }
+    }
+
     private void syncWorkspace(Build build, Workspace workspace, Repository repository, Event setupEndEvent) {
         // Run on the worker pool - might take a while to sync from VCS remote server.
         workerExecutor.executeBlocking(bch -> {
@@ -278,6 +307,35 @@ public class WorkspaceVerticle extends Plugin {
 
             fireSetupEndEvent(setupEndEvent);
         });
+    }
+
+    private void syncWorkspaceForPhaseWithCreds(Build build, Repository repository, Workspace childWorkspace,
+                                                Repository childRepo, Event phaseEndEvent) {
+
+        if (repository != null && repository.hasSecret()) {
+
+            JsonObject data = new JsonObject().put(NAME, repository.getSecret().getName());
+
+            vertx.eventBus().<JsonObject>send(RETRIEVE_DATA_ADDRESS, data, rh -> {
+                if (rh.succeeded()) {
+                    JsonObject secretJson = rh.result().body();
+
+                    if (secretJson != null) {
+                        build.setRepositorySecret(secretJson);
+                        syncWorkspaceForPhase(build, childWorkspace, childRepo, phaseEndEvent);
+
+                    } else {
+                        syncError(childWorkspace, phaseEndEvent, new Exception("Unable to retrieve data from vault."));
+                    }
+
+                } else {
+                    syncError(childWorkspace, phaseEndEvent, rh.cause());
+                }
+            });
+
+        } else {
+            syncWorkspaceForPhase(build, childWorkspace, childRepo, phaseEndEvent);
+        }
     }
 
     private void syncWorkspaceForPhase(Build build, Workspace childWorkspace, Repository childRepo, Event phaseEndEvent) {

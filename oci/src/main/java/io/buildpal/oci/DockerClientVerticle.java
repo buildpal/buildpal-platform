@@ -16,6 +16,7 @@
 
 package io.buildpal.oci;
 
+import io.buildpal.core.config.Constants;
 import io.buildpal.core.domain.Phase;
 import io.buildpal.core.domain.Workspace;
 import io.buildpal.core.pipeline.Plugin;
@@ -24,26 +25,37 @@ import io.buildpal.core.pipeline.event.CommandKey;
 import io.buildpal.core.pipeline.event.Event;
 import io.buildpal.core.pipeline.event.EventKey;
 import io.buildpal.core.util.FileUtils;
+import io.buildpal.core.util.ResultUtils;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpVersion;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.core.streams.Pump;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 import static io.buildpal.core.config.Constants.BUILDPAL_DATA_VOLUME;
 import static io.buildpal.core.config.Constants.DASH;
 import static io.buildpal.core.config.Constants.DATA_FOLDER_PATH;
+import static io.buildpal.core.config.Constants.DELETE_CONTAINERS_ADDRESS;
+import static io.buildpal.core.config.Constants.KILL_CONTAINERS_ADDRESS;
+import static io.buildpal.core.config.Constants.TAIL;
+import static io.buildpal.core.domain.Entity.ID;
 import static io.buildpal.core.util.FileUtils.COLON;
 import static io.buildpal.core.util.FileUtils.DOT_SLASH;
+import static io.buildpal.core.util.ResultUtils.getIDs;
 
 public class DockerClientVerticle extends Plugin {
     private static final Logger logger = LoggerFactory.getLogger(DockerClientVerticle.class);
@@ -53,19 +65,27 @@ public class DockerClientVerticle extends Plugin {
     private static final String CREATE = "/containers/create?name=%s";
     private static final String START = "/containers/%s/start";
     private static final String WAIT = "/containers/%s/wait";
+    private static final String DELETE = "/containers/%s";
+    private static final String KILL = "/containers/%s/kill";
+    private static final String LOGS = "/containers/%s/logs?stdout=true&stderr=true&tail=%s";
 
     private static final String STATUS_CODE = "StatusCode";
     private static final String CONTENT_TYPE = "Content-Type";
     private static final String CONTENT_JSON = "application/json";
 
-    private static final String FIND_IMAGE_ERROR = "Failed to find image %s. Error: %s";
-    private static final String PULL_IMAGE_ERROR = "Failed to pull image %s. Error: %s";
-    private static final String CREATE_ERROR = "Failed to create container %s. Error: %s";
-    private static final String START_ERROR = "Failed to start container %s. Error: %s";
-    private static final String WAIT_ERROR = "Failed to wait for container %s. Error: %s";
+    private static final String FIND_IMAGE_ERROR = "Failed to find image: %s. Error: %s";
+    private static final String PULL_IMAGE_ERROR = "Failed to pull image: %s. Error: %s";
+    private static final String CREATE_ERROR = "Failed to create container: %s. Error: %s";
+    private static final String START_ERROR = "Failed to start container: %s. Error: %s";
+    private static final String WAIT_ERROR = "Failed to wait for container: %s. Error: %s";
+    private static final String LOGS_ERROR = "Failed to get logs for container: %s.";
+
+    private static final String LOGS_PATH = "/logs";
 
     private JsonArray binds = new JsonArray();
     private HttpClient dockerClient;
+    private String host;
+    private int httpPort;
 
     @Override
     public Set<CommandKey> commandKeysToRegister() {
@@ -103,6 +123,20 @@ public class DockerClientVerticle extends Plugin {
     }
 
     @Override
+    protected void starting(Future<Void> startFuture) {
+
+        vertx.eventBus().localConsumer(DELETE_CONTAINERS_ADDRESS, deleteContainersHandler());
+        vertx.eventBus().localConsumer(KILL_CONTAINERS_ADDRESS, killContainersHandler());
+
+        host = Constants.getDockerVerticleHostOrIP(config(), "localhost");
+        httpPort = Constants.getDockerVerticleHttpPort(config(), 50001);
+
+        vertx.createHttpServer()
+                .requestHandler(httpLogHandler())
+                .listen(httpPort, res -> startFuture.complete());
+    }
+
+    @Override
     protected Handler<Message<JsonObject>> phaseHandler(EventBus eb) {
         return mh -> {
             Command command = new Command(mh.body());
@@ -114,6 +148,44 @@ public class DockerClientVerticle extends Plugin {
                     .setPhase(phase);
 
             findImage(command, phase, phaseEndEvent);
+        };
+    }
+
+    private Handler<Message<JsonObject>> deleteContainersHandler() {
+        return mh -> {
+            List<String> containerIDs = getIDs(mh.body());
+
+            for (String containerID : containerIDs) {
+                deleteContainer(containerID);
+            }
+        };
+    }
+
+    private Handler<Message<JsonObject>> killContainersHandler() {
+        return mh -> {
+            List<String> containerIDs = getIDs(mh.body());
+
+            for (String containerID : containerIDs) {
+                killContainer(containerID);
+            }
+        };
+    }
+
+    private Handler<HttpServerRequest> httpLogHandler() {
+        return request -> {
+            if (request.method() == HttpMethod.GET && LOGS_PATH.equals(request.path())) {
+                request.bodyHandler(bh -> {
+                    String containerID = request.getParam(ID);
+                    String tail = request.getParam(TAIL);
+
+                    getContainerLogs(containerID, tail, request);
+                });
+
+            } else {
+                request.response()
+                        .setStatusCode(500)
+                        .end(ResultUtils.newResult(List.of("Unsupported operation")).encode());
+            }
         };
     }
 
@@ -180,7 +252,9 @@ public class DockerClientVerticle extends Plugin {
                     error(String.format(CREATE_ERROR, name, bh.toString()), phaseEndEvent, null);
 
                 } else {
-                    phase.setContainerID(bh.toJsonObject().getString("Id"));
+                    phase.setContainerID(bh.toJsonObject().getString("Id"))
+                            .setContainerHost(host)
+                            .setContainerPort(httpPort);
 
                     startContainer(name, command, phase, phaseEndEvent);
                 }
@@ -250,6 +324,64 @@ public class DockerClientVerticle extends Plugin {
         request.end();
     }
 
+    private void deleteContainer(String containerID) {
+
+        HttpClientRequest request = dockerClient.delete(String.format(DELETE, containerID), r -> {
+            r.bodyHandler(bh -> {
+                if (r.statusCode() != 204) {
+                    logger.error("Unable to delete container: " + containerID + ". Error: " + bh.toString());
+                }
+            });
+        });
+
+        request.exceptionHandler(ex -> logger.error("Unable to delete container: " + containerID, ex));
+
+        addHeaders(request);
+        request.end();
+    }
+
+    private void killContainer(String containerID) {
+
+        HttpClientRequest request = dockerClient.post(String.format(KILL, containerID), r -> {
+            r.bodyHandler(bh -> {
+                if (r.statusCode() != 204) {
+                    logger.error("Unable to kill container: " + containerID + ". Error: " + bh.toString());
+                }
+            });
+        });
+
+        request.exceptionHandler(ex -> logger.error("Unable to kill container: " + containerID, ex));
+
+        addHeaders(request);
+        request.end();
+    }
+
+    private void getContainerLogs(String containerID, String tail, HttpServerRequest serverRequest) {
+        HttpClientRequest request = dockerClient.get(String.format(LOGS, containerID, tail), dockerResponse -> {
+
+            if (dockerResponse.statusCode() == 200) {
+                serverRequest.response().setChunked(true);
+
+                Pump pump = Pump.pump(dockerResponse, serverRequest.response());
+                pump.start();
+
+                dockerResponse.endHandler(eh -> {
+                    // TODO: Make sure that the pump is flushed.
+                    serverRequest.response().end();
+                });
+
+            } else {
+                logsError(containerID, serverRequest,
+                        new Exception("Get logs error code: " + dockerResponse.statusCode()));
+            }
+        });
+
+        request.exceptionHandler(ex -> logsError(containerID, serverRequest, ex));
+
+        addHeaders(request);
+        request.end();
+    }
+
     private String getContainerName(Command command, Phase phase) {
         return command.getBuild().getID() + DASH + phase.getID();
     }
@@ -283,5 +415,13 @@ public class DockerClientVerticle extends Plugin {
 
         event.setStatusCode(500).setStatusMessage(error);
         firePhaseEndEvent(event);
+    }
+
+    private void logsError(String containerID, HttpServerRequest serverRequest, Throwable ex) {
+        String msg = String.format(LOGS_ERROR, containerID);
+        logger.error(msg, ex);
+        serverRequest.response()
+                .setStatusCode(500)
+                .end(ResultUtils.newResult(List.of(msg)).encode());
     }
 }

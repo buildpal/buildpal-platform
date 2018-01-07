@@ -31,10 +31,10 @@ import static io.buildpal.core.util.VertxUtils.future;
 
 public class VaultService {
 
-    static final String SAVE_DATA_ADDRESS = "vault:saveData";
-    static final String SAVE_HASH_ADDRESS = "vault:saveHash";
-    static final String RETRIEVE_DATA_ADDRESS = "vault:retrieveData";
-    static final String RETRIEVE_HASH_ADDRESS = "vault:retrieveHash";
+    public static final String SAVE_DATA_ADDRESS = "vault:saveData";
+    public static final String SAVE_HASH_ADDRESS = "vault:saveHash";
+    public static final String RETRIEVE_DATA_ADDRESS = "vault:retrieveData";
+    public static final String RETRIEVE_HASH_ADDRESS = "vault:retrieveHash";
 
     private final EventBus eb;
 

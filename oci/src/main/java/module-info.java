@@ -21,6 +21,7 @@ module io.buildpal.oci {
     requires jdk.unsupported;
 
     requires vertx.core;
+    requires vertx.web;
 
     requires static io.netty.transport.epoll;
     //requires static io.netty.transport.kqueue;
