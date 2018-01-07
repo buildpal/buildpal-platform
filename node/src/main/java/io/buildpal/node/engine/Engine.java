@@ -94,9 +94,14 @@ public class Engine extends AbstractVerticle {
 
         vertx.eventBus().<JsonObject>consumer(ABORT, mh -> {
             // Received a request to abort the build.
-            Flow flow = currentFlows.get(new Build(mh.body()).getID());
+            Build build = new Build(mh.body());
+            Flow flow = currentFlows.get(build.getID());
 
-            if (flow == null) return;
+            if (flow == null) {
+                build.markForAbort();
+                mh.reply(build.json());
+                return;
+            }
 
             // Notify the flow to abort.
             List<String> containerIDs = flow.abort();

@@ -328,7 +328,7 @@ public class DockerClientVerticle extends Plugin {
 
         HttpClientRequest request = dockerClient.delete(String.format(DELETE, containerID), r -> {
             r.bodyHandler(bh -> {
-                if (r.statusCode() != 204) {
+                if (r.statusCode() == 500) {
                     logger.error("Unable to delete container: " + containerID + ". Error: " + bh.toString());
                 }
             });
