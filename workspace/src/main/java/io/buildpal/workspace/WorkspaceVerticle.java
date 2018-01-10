@@ -299,7 +299,8 @@ public class WorkspaceVerticle extends Plugin {
                 // Create phases folder.
                 fs.mkdirsBlocking(workspace.getPhasesPath(), PERMS_755);
 
-                build.setWorkspace(workspace);
+                // Pass the updated repository (updated metadata).
+                setupEndEvent.setRepository(repository);
 
             } else {
                 syncError(workspace, setupEndEvent, rh.cause());
@@ -322,7 +323,7 @@ public class WorkspaceVerticle extends Plugin {
 
                     if (secretJson != null) {
                         build.setRepositorySecret(secretJson);
-                        syncWorkspaceForPhase(build, childWorkspace, childRepo, phaseEndEvent);
+                        syncWorkspaceForPhase(build, childWorkspace, repository, childRepo, phaseEndEvent);
 
                     } else {
                         syncError(childWorkspace, phaseEndEvent, new Exception("Unable to retrieve data from vault."));
@@ -334,11 +335,12 @@ public class WorkspaceVerticle extends Plugin {
             });
 
         } else {
-            syncWorkspaceForPhase(build, childWorkspace, childRepo, phaseEndEvent);
+            syncWorkspaceForPhase(build, childWorkspace, repository, childRepo, phaseEndEvent);
         }
     }
 
-    private void syncWorkspaceForPhase(Build build, Workspace childWorkspace, Repository childRepo, Event phaseEndEvent) {
+    private void syncWorkspaceForPhase(Build build, Workspace childWorkspace,
+                                       Repository repository, Repository childRepo, Event phaseEndEvent) {
         // Run on the worker pool - might take a while to sync from VCS remote server.
         workerExecutor.executeBlocking(bch -> {
             try {
@@ -358,6 +360,9 @@ public class WorkspaceVerticle extends Plugin {
             if (rh.failed()) {
                 syncError(childWorkspace, phaseEndEvent, rh.cause());
             }
+
+            // Pass the updated repository (updated metadata).
+            phaseEndEvent.setRepository(repository);
 
             firePhaseEndEvent(phaseEndEvent);
         });

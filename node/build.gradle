@@ -3,6 +3,7 @@ javaModule.name = "io.buildpal.node"
 dependencies {
     implementation "io.vertx:vertx-auth-jwt:$vertxVersion"
     implementation "io.vertx:vertx-web:$vertxVersion"
+    implementation "io.vertx:vertx-zookeeper:$vertxVersion"
 
     implementation "org.apache.commons:commons-lang3:$commonsLangVersion"
     implementation "org.slf4j:slf4j-api:$slf4jVersion"

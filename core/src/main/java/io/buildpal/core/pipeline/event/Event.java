@@ -91,9 +91,9 @@ public class Event {
         return new Repository(repository);
     }
 
-    public Event setRepository(JsonObject repository) {
+    public Event setRepository(Repository repository) {
         if (repository != null) {
-            jsonObject.put(Repository.REPOSITORY, repository);
+            jsonObject.put(Repository.REPOSITORY, repository.json());
         }
 
         return this;

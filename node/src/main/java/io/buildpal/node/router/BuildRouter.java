@@ -121,7 +121,7 @@ public class BuildRouter extends CrudRouter<Build> {
                         dbManager.delete(id, r -> write202Response(routingContext, r.result()));
 
                         // Delete the pipeline instance asynchronously.
-                        vertx.eventBus().send(DELETE, build.json());
+                        vertx.eventBus().publish(DELETE, build.json());
 
                     } else {
                         JsonObject result = addError(newResult(),
@@ -187,19 +187,14 @@ public class BuildRouter extends CrudRouter<Build> {
                     Build build = new Build(gh.result().getJsonObject(ITEM));
 
                     if (build.canAbort()) {
-                        // Abort the pipeline instance (build).
-                        vertx.eventBus().<JsonObject>send(ABORT, build.json(), reply -> {
+                        // Mark the pipeline instance (build) as aborted.
+                        build.markForAbort();
 
-                            if (reply.succeeded()) {
-                                // Save updated build.
-                                dbManager.replace(reply.result().body(),
-                                        rh -> write202Response(routingContext, rh.result()));
+                        // Abort the build asynchronously.
+                        vertx.eventBus().<JsonObject>publish(ABORT, build.json());
 
-                            } else {
-                                writeResponse(routingContext, addError(newResult(), "Unable to abort the build."));
-                            }
-                        });
-
+                        // Save updated build.
+                        dbManager.replace(build.json(), rh -> write202Response(routingContext, rh.result()));
 
                     } else {
                         JsonObject result = addError(newResult(),

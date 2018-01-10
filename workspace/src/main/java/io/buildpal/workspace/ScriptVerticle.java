@@ -27,6 +27,8 @@ import io.buildpal.core.pipeline.event.Event;
 import io.buildpal.core.pipeline.event.EventKey;
 import io.buildpal.core.process.ExternalProcess;
 import io.buildpal.core.util.FileUtils;
+import io.buildpal.workspace.vcs.GitController;
+import io.buildpal.workspace.vcs.P4Controller;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -135,7 +137,7 @@ public class ScriptVerticle extends Plugin {
                     .setKey(EventKey.SETUP_END)
                     .setBuildID(build.getID());
 
-            if (repository.isPipelineScanOn() || repository.hasPipeline()) {
+            if (shouldScanRepository(repository)) {
                 // Try scanning the repository for script.[java|js]
                 scanScript(build, setupEndEvent);
 
@@ -165,6 +167,31 @@ public class ScriptVerticle extends Plugin {
                 error(build, setupEndEvent, new Exception("Workspace scan did not find the pipeline script"));
             }
         });
+    }
+
+    private boolean shouldScanRepository(Repository repository) {
+
+        switch (repository.getType()) {
+            case MULTI_GIT:
+            case MULTI_P4:
+                JsonArray children = repository.getChildren();
+
+                for (int c=0; c<children.size(); c++) {
+                    Repository childRepo = new Repository(children.getJsonObject(c));
+
+                    if (childRepo.hasPipeline()) {
+                        return true;
+                    }
+                }
+
+                break;
+
+            default:
+                return repository.isPipelineScanOn();
+        }
+
+
+        return false;
     }
 
     private void writeInstance(Build build, Path scriptPath, String script, Event setupEndEvent) {

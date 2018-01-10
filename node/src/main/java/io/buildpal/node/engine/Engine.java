@@ -98,8 +98,6 @@ public class Engine extends AbstractVerticle {
             Flow flow = currentFlows.get(build.getID());
 
             if (flow == null) {
-                build.markForAbort();
-                mh.reply(build.json());
                 return;
             }
 
@@ -110,13 +108,12 @@ public class Engine extends AbstractVerticle {
                 // Kill the containers asynchronously - best effort (relying on vertx).
                 vertx.eventBus().send(KILL_CONTAINERS_ADDRESS, newEntity(containerIDs));
             }
-
-            mh.reply(flow.getBuild().json());
         });
     }
 
     private void registerFlowHandlers() {
         vertx.eventBus().localConsumer(EventKey.SETUP_END.getAddress(), flowHandler());
+        vertx.eventBus().localConsumer(EventKey.PHASE_UPDATE.getAddress(), flowHandler());
         vertx.eventBus().localConsumer(EventKey.PHASE_END.getAddress(), flowHandler());
         vertx.eventBus().localConsumer(EventKey.TEAR_DOWN_END.getAddress(), flowHandler());
 
@@ -134,7 +131,10 @@ public class Engine extends AbstractVerticle {
                 Event event = new Event(mh.body());
 
                 Flow flow = currentFlows.get(event.getBuildID());
-                flow.process(event);
+
+                if (flow != null) {
+                    flow.process(event);
+                }
 
             } catch (Exception ex) {
                 logger.error("Unable to process flow.", ex);

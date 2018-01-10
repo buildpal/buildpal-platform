@@ -18,6 +18,7 @@ package io.buildpal.core.pipeline.event;
 
 public enum EventKey {
     SETUP_END("pipeline:setup:end"),
+    PHASE_UPDATE("pipeline:phase:update"),
     PHASE_END("pipeline:phase:end"),
     TEAR_DOWN_END("pipeline:tearDown:end");
 

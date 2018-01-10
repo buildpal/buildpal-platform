@@ -57,7 +57,9 @@ buildDockerImage() {
                -v /var/run/docker.sock:/var/run/docker.sock \
                -v buildpal-system:/buildpal/system \
                -v buildpal-data:/buildpal/data \
-               -p 8080:8080 -p 50001:50001 buildpal/buildpal
+               -p 8080:8080 -p 50001:50001 \
+               -e ZOOKEEPER_CONNECTION_STRING=192.168.1.248:2181 \
+               buildpal/buildpal
 
     echo "${GREEN}Started docker container for buildpal!${NC}\n\n"
 

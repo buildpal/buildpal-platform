@@ -187,7 +187,13 @@ public class Phase extends Entity<Phase> {
         return this;
     }
 
-    public Phase addRunResult(Status status) {
+    public Phase addRunResult() {
+        runResults.add(Status.IN_FLIGHT);
+        return this;
+    }
+
+    public Phase updateRunResult(Status status) {
+        runResults.remove(runResults.size() - 1);
         runResults.add(status);
         return this;
     }
@@ -198,7 +204,7 @@ public class Phase extends Entity<Phase> {
         }
 
         for (Status status : runResults) {
-            if (status == Status.FAILED || status == Status.CANCELED) return status;
+            if (status == Status.IN_FLIGHT || status == Status.FAILED || status == Status.CANCELED) return status;
         }
 
         return Status.DONE;

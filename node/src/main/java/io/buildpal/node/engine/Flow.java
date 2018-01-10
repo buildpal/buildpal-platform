@@ -23,6 +23,7 @@ import io.buildpal.core.pipeline.Plugin;
 import io.buildpal.core.pipeline.event.Command;
 import io.buildpal.core.pipeline.event.CommandKey;
 import io.buildpal.core.pipeline.event.Event;
+import io.buildpal.core.pipeline.event.EventKey;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -129,6 +130,13 @@ class Flow implements Shareable {
     }
 
     public void process(Event event) {
+        // Check if this an ad-hoc phase update event.
+        if (event != null && event.getKey() == EventKey.PHASE_UPDATE) {
+            updateBuildFromAdhocPhaseUpdateEvent(event);
+            return;
+        }
+
+
         State currentState = statesQueue.peek();
 
         if (aborted && currentState != State.TEAR_DOWN) {
@@ -195,6 +203,7 @@ class Flow implements Shareable {
 
                 // Start processing phase.
                 // Phases in the same stage are processed in parallel.
+                phase.addRunResult();
                 eb.send(CommandKey.RUN_PHASE.getAddress(order), runPhaseCommand(phase));
             }
 
@@ -208,7 +217,7 @@ class Flow implements Shareable {
             int phaseIndex = eventPhase.getIndex();
             Phase stagePhase = stage.get(phaseIndex);
 
-            if (updatePhaseFromEvent(event, eventPhase, stagePhase)) {
+            if (updateBuildFromPhaseEvent(event, eventPhase, stagePhase)) {
 
                 int counter = phasesCounter.get(phaseIndex).incrementAndGet();
 
@@ -223,6 +232,7 @@ class Flow implements Shareable {
                     int order = phasePlugins.get(counter).order();
 
                     // Continue processing the phase by passing it to the next plugin.
+                    stagePhase.addRunResult();
                     eb.send(CommandKey.RUN_PHASE.getAddress(order), runPhaseCommand(stagePhase));
                 }
 
@@ -246,7 +256,8 @@ class Flow implements Shareable {
 
             if (counter == tearDownPlugins.size()) {
 
-                if (!aborted) {
+                // Mark the build as complete if it wasn't marked for failure or if it was not aborted.
+                if (build.getStatus() != Status.FAILED && !aborted) {
                     build.markForComplete();
 
                     // Update DB again.
@@ -284,6 +295,10 @@ class Flow implements Shareable {
 
             if (event.hasWorkspace()) {
                 build.setWorkspace(event.getWorkspace());
+            }
+
+            if (event.hasRepository()) {
+                build.setRepository(event.getRepository());
             }
 
             if (event.hasStages()) {
@@ -324,9 +339,13 @@ class Flow implements Shareable {
         }
     }
 
-    private boolean updatePhaseFromEvent(Event event, Phase eventPhase, Phase stagePhase) {
+    private boolean updateBuildFromPhaseEvent(Event event, Phase eventPhase, Phase stagePhase) {
+        if (event.hasRepository()) {
+            build.setRepository(event.getRepository());
+        }
+
         if (event.getStatusCode() == 200) {
-            stagePhase.addRunResult(Status.DONE);
+            stagePhase.updateRunResult(Status.DONE);
 
             if (eventPhase.hasContainerID()) {
                 stagePhase.setContainerID(eventPhase.getContainerID());
@@ -343,7 +362,7 @@ class Flow implements Shareable {
             return true;
 
         } else {
-            stagePhase.addRunResult(Status.FAILED);
+            stagePhase.updateRunResult(Status.FAILED);
             stagePhase.setStatus(Status.FAILED);
 
             build.updatePhase(stagePhase);
@@ -352,6 +371,34 @@ class Flow implements Shareable {
             eb.send(BUILD_UPDATE_ADDRESS, build.json());
 
             return false;
+        }
+    }
+
+    private void updateBuildFromAdhocPhaseUpdateEvent(Event adhocEvent) {
+        Phase eventPhase = adhocEvent.getPhase();
+        List<Phase> stage = stagesQueue.peek();
+
+        if (eventPhase == null || stage == null) return;
+
+        if (adhocEvent.getStatusCode() == 200) {
+            Phase stagePhase = stage.get(eventPhase.getIndex());
+
+            if (eventPhase.hasContainerID()) {
+                stagePhase.setContainerID(eventPhase.getContainerID());
+
+                if (eventPhase.hasContainerHost()) {
+                    stagePhase.setContainerHost(eventPhase.getContainerHost());
+                }
+
+                if (eventPhase.hasContainerPort()) {
+                    stagePhase.setContainerPort(eventPhase.getContainerPort());
+                }
+
+                build.updatePhase(stagePhase);
+
+                // Update DB.
+                eb.send(BUILD_UPDATE_ADDRESS, build.json());
+            }
         }
     }
 

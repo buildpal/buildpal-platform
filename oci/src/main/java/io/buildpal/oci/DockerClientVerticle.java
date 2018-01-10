@@ -67,7 +67,7 @@ public class DockerClientVerticle extends Plugin {
     private static final String WAIT = "/containers/%s/wait";
     private static final String DELETE = "/containers/%s";
     private static final String KILL = "/containers/%s/kill";
-    private static final String LOGS = "/containers/%s/logs?stdout=true&stderr=true&tail=%s";
+    private static final String LOGS = "/containers/%s/logs?stdout=true&stderr=true&timestamps=false&tail=%s";
 
     private static final String STATUS_CODE = "StatusCode";
     private static final String CONTENT_TYPE = "Content-Type";
@@ -193,6 +193,15 @@ public class DockerClientVerticle extends Plugin {
         vertx.eventBus().send(EventKey.PHASE_END.getAddress(), phaseEndEvent.json());
     }
 
+    private void firePhaseUpdateEvent(Command command, Phase phase) {
+        Event updatePhaseEvent = new Event()
+                .setKey(EventKey.PHASE_UPDATE)
+                .setBuildID(command.getBuild().getID())
+                .setPhase(phase);
+
+        vertx.eventBus().send(EventKey.PHASE_UPDATE.getAddress(), updatePhaseEvent.json());
+    }
+
     private void findImage(Command command, Phase phase, Event phaseEndEvent) {
 
         String image = phase.getContainerArgs().getImage();
@@ -276,7 +285,10 @@ public class DockerClientVerticle extends Plugin {
                     error(String.format(START_ERROR, name, bh.toString()), phaseEndEvent, null);
 
                 } else {
-                    waitContainer(name, command, phase, phaseEndEvent);
+                    // Send an update about the container.
+                    firePhaseUpdateEvent(command, phase);
+
+                    waitContainer(name, phaseEndEvent);
                 }
             });
         });
@@ -288,7 +300,7 @@ public class DockerClientVerticle extends Plugin {
         request.end();
     }
 
-    private void waitContainer(String name, Command command, Phase phase, Event phaseEndEvent) {
+    private void waitContainer(String name, Event phaseEndEvent) {
 
         HttpClientRequest request = dockerClient.post(String.format(WAIT, name), r -> {
             r.bodyHandler(bh -> {
@@ -362,17 +374,30 @@ public class DockerClientVerticle extends Plugin {
             if (dockerResponse.statusCode() == 200) {
                 serverRequest.response().setChunked(true);
 
-                Pump pump = Pump.pump(dockerResponse, serverRequest.response());
-                pump.start();
+                DockerStreamerSansHeader streamer =
+                        new DockerStreamerSansHeader(data -> serverRequest.response().write(data));
+
+                dockerResponse.handler(buffer -> {
+                    streamer.write(buffer);
+
+                    if (serverRequest.response().writeQueueFull()) {
+                        dockerResponse.pause();
+
+                        serverRequest.response().drainHandler(dh -> dockerResponse.resume());
+                    }
+                });
 
                 dockerResponse.endHandler(eh -> {
-                    // TODO: Make sure that the pump is flushed.
+                    // Flush the stream.
+                    streamer.end();
+
                     serverRequest.response().end();
                 });
 
             } else {
-                logsError(containerID, serverRequest,
-                        new Exception("Get logs error code: " + dockerResponse.statusCode()));
+                Exception ex = dockerResponse.statusCode() == 404 ?
+                        null : new Exception("Get logs error code: " + dockerResponse.statusCode());
+                logsError(containerID, serverRequest, ex);
             }
         });
 
@@ -419,7 +444,11 @@ public class DockerClientVerticle extends Plugin {
 
     private void logsError(String containerID, HttpServerRequest serverRequest, Throwable ex) {
         String msg = String.format(LOGS_ERROR, containerID);
-        logger.error(msg, ex);
+
+        if (ex != null) {
+            logger.error(msg, ex);
+        }
+
         serverRequest.response()
                 .setStatusCode(500)
                 .end(ResultUtils.newResult(List.of(msg)).encode());
