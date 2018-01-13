@@ -265,10 +265,12 @@ public class WorkspaceVerticle extends Plugin {
 
                     } else {
                         syncError(workspace, setupEndEvent, new Exception("Unable to retrieve data from vault."));
+                        fireSetupEndEvent(setupEndEvent);
                     }
 
                 } else {
                     syncError(workspace, setupEndEvent, rh.cause());
+                    fireSetupEndEvent(setupEndEvent);
                 }
             });
 
@@ -328,10 +330,12 @@ public class WorkspaceVerticle extends Plugin {
 
                     } else {
                         syncError(childWorkspace, phaseEndEvent, new Exception("Unable to retrieve data from vault."));
+                        firePhaseEndEvent(phaseEndEvent);
                     }
 
                 } else {
                     syncError(childWorkspace, phaseEndEvent, rh.cause());
+                    firePhaseEndEvent(phaseEndEvent);
                 }
             });
 
@@ -386,11 +390,13 @@ public class WorkspaceVerticle extends Plugin {
                         revert(build, workspace, repository, tearDownEvent);
 
                     } else {
-                        logger.error("Unable to retrieve data from vault. Cannot proceed with revert for build: " + build.getID());
+                        revertError(workspace, tearDownEvent, new Exception("Unable to retrieve data from vault."));
+                        fireTearDownEndEvent(tearDownEvent);
                     }
 
                 } else {
-                    logger.error("Unable to retrieve data from vault. Cannot proceed with revert for build: " + build.getID(), rh.cause());
+                    revertError(workspace, tearDownEvent, rh.cause());
+                    fireTearDownEndEvent(tearDownEvent);
                 }
             });
 
@@ -578,6 +584,13 @@ public class WorkspaceVerticle extends Plugin {
 
     private void syncError(Workspace workspace, Event event, Throwable cause) {
         String error = "Unable to sync workspace: " + workspace.getID();
+        logger.error(error, cause);
+
+        event.setStatusCode(500).setStatusMessage(error);
+    }
+
+    private void revertError(Workspace workspace, Event event, Throwable cause) {
+        String error = "Unable to revert workspace: " + workspace.getID();
         logger.error(error, cause);
 
         event.setStatusCode(500).setStatusMessage(error);

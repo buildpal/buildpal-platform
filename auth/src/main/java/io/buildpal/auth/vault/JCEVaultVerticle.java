@@ -70,10 +70,10 @@ public class JCEVaultVerticle extends AbstractVerticle {
             this.dataVault = new Vault(key.toCharArray(), path + VAULT_DATA_FILE);
             this.hashVault = new Vault(key.toCharArray(), path + VAULT_HASH_FILE);
 
-            vertx.eventBus().localConsumer(SAVE_DATA_ADDRESS, saveHandler());
-            vertx.eventBus().localConsumer(SAVE_HASH_ADDRESS, saveHashHandler());
-            vertx.eventBus().localConsumer(RETRIEVE_DATA_ADDRESS, retrieveHandler());
-            vertx.eventBus().localConsumer(RETRIEVE_HASH_ADDRESS, retrieveHashHandler());
+            vertx.eventBus().consumer(SAVE_DATA_ADDRESS, saveHandler());
+            vertx.eventBus().consumer(SAVE_HASH_ADDRESS, saveHashHandler());
+            vertx.eventBus().consumer(RETRIEVE_DATA_ADDRESS, retrieveHandler());
+            vertx.eventBus().consumer(RETRIEVE_HASH_ADDRESS, retrieveHashHandler());
 
             startFuture.complete();
 
