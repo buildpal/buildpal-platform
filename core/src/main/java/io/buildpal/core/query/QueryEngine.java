@@ -67,6 +67,8 @@ public class QueryEngine {
     }
 
     private static void sort(QuerySpec querySpec, List<JsonObject> items) {
+        if (items == null || items.isEmpty()) return;
+
         List<Sort> sorts = querySpec.getSorts();
 
         if (sorts.isEmpty()) return;

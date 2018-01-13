@@ -69,6 +69,7 @@ value
    | STRING            #string
    | DOUBLE            #double
    | '-'? INT EXP?     #long
+   | INSTANT           #instant
    ;
 
 STRING
@@ -99,6 +100,10 @@ INT
 // EXP we use "\-" since "-" means "range" inside [...]
 EXP
    : [Ee] [+\-]? INT
+   ;
+
+INSTANT
+   : 'i' '"' (ESC | ~ ["\\])* '"'
    ;
 
 SP

@@ -16,6 +16,10 @@
 
 package io.buildpal.core.query.operand;
 
+import java.time.Instant;
+
+import static java.time.format.DateTimeFormatter.ISO_INSTANT;
+
 public class Operand {
 
     private Object value;
@@ -23,6 +27,7 @@ public class Operand {
     private Long longValue;
     private Double doubleValue;
     private Boolean boolValue;
+    private Instant instantValue;
 
     public Operand() {
         reset();
@@ -71,6 +76,17 @@ public class Operand {
         return this;
     }
 
+    public Instant getInstantValue() {
+        return instantValue;
+    }
+
+    public Operand setInstantValue(Instant instantValue) {
+        reset();
+        this.instantValue = instantValue;
+
+        return this;
+    }
+
     public Object getValue() {
         return value;
     }
@@ -110,11 +126,16 @@ public class Operand {
         return null;
     }
 
+    public Instant toInstant() {
+        return Instant.from(ISO_INSTANT.parse(getValue().toString()));
+    }
+
     private void reset() {
         value = null;
         strValue = null;
         longValue = null;
         doubleValue = null;
         boolValue = null;
+        instantValue = null;
     }
 }

@@ -27,6 +27,7 @@ import io.buildpal.db.DbManager;
 import io.buildpal.db.DbManagers;
 import io.buildpal.node.auth.LoginAuthHandler;
 import io.buildpal.node.auth.LogoutAuthHandler;
+import io.buildpal.node.data.BuildScavenger;
 import io.buildpal.node.engine.Engine;
 import io.buildpal.node.router.BaseRouter;
 import io.buildpal.node.router.BuildRouter;
@@ -58,7 +59,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.buildpal.core.config.Constants.ADMIN;
 import static io.buildpal.core.config.Constants.EMPTY_JSON;
 import static io.buildpal.core.config.Constants.HTTP_PORT;
-import static io.buildpal.core.config.Constants.IS_SERVER;
 import static io.buildpal.core.config.Constants.NODE;
 import static io.buildpal.core.util.ResultUtils.failed;
 import static io.buildpal.node.router.CrudRouter.API_PATH;
@@ -103,10 +103,10 @@ public class Node extends AbstractVerticle {
             JWTAuthOptions jwtAuthOptions = new JWTAuthOptions(AuthConfigUtils.getAuthConfig(config()));
             JWTAuth jwtAuth = JWTAuth.create(vertx, jwtAuthOptions);
 
-            JsonObject serverConfig = config().getJsonObject(NODE);
+            JsonObject nodeConfig = config().getJsonObject(NODE);
 
-            configureMainRouter(serverConfig);
-            configureCors(serverConfig);
+            configureMainRouter(nodeConfig);
+            configureCors(nodeConfig);
 
             // Order is important. Keep an eye on sub routes and main routes.
             configureLoginLogout(jwtAuth);
@@ -235,13 +235,13 @@ public class Node extends AbstractVerticle {
 
             dbManagers.getUserManager().add(adminUser.json(), ah -> {
                 if (failed(ah)) {
-                    String message = "Unable to generate and save OTP for admin. Object: " + ah.result();
+                    String message = "Unable to create and save admin. Result: " + ah.result();
                     logger.error(message, ah.result());
 
                     startFuture.fail(message);
 
                 } else {
-                    logger.info("Admin one time password: " + tmp);
+                    logger.info("Admin password: " + tmp);
                     listen(startFuture);
                 }
             });
@@ -272,7 +272,13 @@ public class Node extends AbstractVerticle {
         List<Verticle> verticles;
 
         if (isServer(config())) {
-            verticles = List.of(new JCEVaultVerticle(), new Engine());
+
+            if (isEngine(config())) {
+                verticles = List.of(new JCEVaultVerticle(), new BuildScavenger(), new Engine());
+
+            } else {
+                verticles = List.of(new JCEVaultVerticle(), new BuildScavenger());
+            }
 
         } else {
             verticles = List.of(new Engine());
@@ -295,6 +301,10 @@ public class Node extends AbstractVerticle {
     }
 
     private boolean isServer(JsonObject config) {
-        return config.getJsonObject(NODE, EMPTY_JSON).getBoolean(IS_SERVER, false);
+        return config.getJsonObject(NODE, EMPTY_JSON).getBoolean("isServer", false);
+    }
+
+    private boolean isEngine(JsonObject config) {
+        return config.getJsonObject(NODE, EMPTY_JSON).getBoolean("isEngine", true);
     }
 }

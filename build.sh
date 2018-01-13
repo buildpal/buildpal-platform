@@ -15,7 +15,7 @@ cleanBuildpalImageAndVolume() {
 
     docker rmi -f buildpal/buildpal:latest
     docker volume rm buildpal-data
-    #docker volume rm buildpal-system
+    docker volume rm buildpal-system
 
     echo "${GREEN}Cleaned buildpal image and volumes.${NC}\n"
 }
@@ -50,15 +50,16 @@ buildDockerImage() {
     echo "\nStarting docker container for buildpal..."
 
     docker volume create buildpal-data
-    #docker volume create buildpal-system
+    docker volume create buildpal-system
 
     docker run -d \
                --name buildpal \
                -v /var/run/docker.sock:/var/run/docker.sock \
                -v buildpal-system:/buildpal/system \
                -v buildpal-data:/buildpal/data \
-               -p 8080:8080 -p 50001:50001 \
+               -p 8080:8080 -p 55555:55555 -p 9080:9080 \
                -e ZOOKEEPER_CONNECTION_STRING=192.168.1.248:2181 \
+               -e PUBLIC_FQDN=192.168.1.248 \
                buildpal/buildpal
 
     echo "${GREEN}Started docker container for buildpal!${NC}\n\n"

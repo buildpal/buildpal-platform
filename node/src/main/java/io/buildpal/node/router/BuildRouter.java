@@ -17,17 +17,15 @@
 package io.buildpal.node.router;
 
 import io.buildpal.core.domain.Build;
-import io.buildpal.core.domain.Phase;
 import io.buildpal.core.domain.Status;
+import io.buildpal.core.query.QuerySpec;
 import io.buildpal.db.DbManager;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpClient;
-import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpVersion;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -45,7 +43,6 @@ import static io.buildpal.core.config.Constants.ITEM;
 import static io.buildpal.core.config.Constants.SUBJECT;
 import static io.buildpal.core.config.Constants.SYSTEM;
 import static io.buildpal.core.config.Constants.TAIL;
-import static io.buildpal.core.domain.Entity.ID;
 import static io.buildpal.core.domain.Entity.populate;
 import static io.buildpal.core.util.ResultUtils.addError;
 import static io.buildpal.core.util.ResultUtils.failed;
@@ -57,7 +54,11 @@ import static io.buildpal.node.engine.Engine.DELETE;
 public class BuildRouter extends CrudRouter<Build> {
     private static final Logger logger = LoggerFactory.getLogger(BuildRouter.class);
 
-    static final String ADD = "build.add";
+    static final String ADD_ADDRESS = "build.add";
+
+    public static final String FIND_ADDRESS = "build.find";
+    public static final String FIND_REPLY_ADDRESS = "build.find.reply";
+    public static final String DELETE_ADDRESS = "build.delete";
 
     private static final String CONTAINER_ID = "containerID";
     private static final String LOGS_PATH = "/logs?id=%s&tail=%s";
@@ -79,8 +80,11 @@ public class BuildRouter extends CrudRouter<Build> {
         configureLogsRoute(collectionPath);
         configureAbortRoute(collectionPath);
 
-        vertx.eventBus().consumer(ADD, addHandler());
+        vertx.eventBus().consumer(ADD_ADDRESS, addHandler());
         vertx.eventBus().consumer(BUILD_UPDATE_ADDRESS, updateHandler());
+
+        vertx.eventBus().localConsumer(FIND_ADDRESS, findHandler());
+        vertx.eventBus().localConsumer(DELETE_ADDRESS, deleteHandler());
     }
 
     private Handler<Message<JsonObject>> addHandler() {
@@ -100,6 +104,24 @@ public class BuildRouter extends CrudRouter<Build> {
                     .setLastModifiedBy(SYSTEM);
 
             dbManager.replace(build.json(), ah -> message.reply(ah.result()));
+        };
+    }
+
+    private Handler<Message<JsonObject>> findHandler() {
+        return message -> {
+            QuerySpec querySpec = new QuerySpec().setQuery(message.body().getString("q"));
+            dbManager.find(querySpec, fh -> vertx.eventBus().send(FIND_REPLY_ADDRESS, fh.result()));
+        };
+    }
+
+    private Handler<Message<JsonObject>> deleteHandler() {
+        return message -> {
+            Build build = new Build(message.body());
+
+            dbManager.delete(build.getID(), dh -> {});
+
+            // Delete the pipeline instance asynchronously.x
+            vertx.eventBus().publish(DELETE, build.json());
         };
     }
 

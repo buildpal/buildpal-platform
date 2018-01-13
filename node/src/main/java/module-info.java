@@ -17,6 +17,7 @@
 module io.buildpal.node {
     exports io.buildpal.node;
     exports io.buildpal.node.engine;
+    exports io.buildpal.node.data;
 
     uses io.buildpal.core.pipeline.Plugin;
 

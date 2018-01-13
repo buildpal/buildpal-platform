@@ -189,7 +189,6 @@ public abstract class FileDbManager implements DbManager {
 
     @Override
     public void find(QuerySpec querySpec, Handler<AsyncResult<JsonObject>> handler) {
-        // Dump the map.
         Future<JsonObject> future = future(handler);
         JsonObject result = ResultUtils.newResult();
 

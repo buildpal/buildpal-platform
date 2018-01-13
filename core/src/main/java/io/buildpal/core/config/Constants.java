@@ -59,7 +59,6 @@ public class Constants {
 
     public static final String HTTP_PORT = "httpPort";
     public static final String HOST = "host";
-    public static final String IS_SERVER = "isServer";
 
     public static int getDockerVerticleHttpPort(JsonObject config, int defaultValue) {
         return config.getJsonObject(DOCKER_VERTICLE, EMPTY_JSON).getInteger(HTTP_PORT, defaultValue);

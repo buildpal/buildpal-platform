@@ -29,6 +29,7 @@ import io.vertx.core.shareddata.LocalMap;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -178,7 +179,7 @@ public class WorkspaceVerticle extends Plugin {
                     .setKey(EventKey.TEAR_DOWN_END)
                     .setBuildID(build.getID());
 
-            revert(build, tearDownEndEvent);
+            revertWithCreds(build, tearDownEndEvent);
         };
     }
 
@@ -368,10 +369,37 @@ public class WorkspaceVerticle extends Plugin {
         });
     }
 
-    private void revert(Build build, Event tearDownEndEvent) {
+    private void revertWithCreds(Build build, Event tearDownEvent) {
         Workspace workspace = build.getWorkspace();
         Repository repository = build.getRepository();
 
+        if (repository != null && repository.hasSecret()) {
+
+            JsonObject data = new JsonObject().put(NAME, repository.getSecret().getName());
+
+            vertx.eventBus().<JsonObject>send(RETRIEVE_DATA_ADDRESS, data, rh -> {
+                if (rh.succeeded()) {
+                    JsonObject secretJson = rh.result().body();
+
+                    if (secretJson != null) {
+                        build.setRepositorySecret(secretJson);
+                        revert(build, workspace, repository, tearDownEvent);
+
+                    } else {
+                        logger.error("Unable to retrieve data from vault. Cannot proceed with revert for build: " + build.getID());
+                    }
+
+                } else {
+                    logger.error("Unable to retrieve data from vault. Cannot proceed with revert for build: " + build.getID(), rh.cause());
+                }
+            });
+
+        } else {
+            revert(build, workspace, repository, tearDownEvent);
+        }
+    }
+
+    private void revert(Build build, Workspace workspace, Repository repository, Event tearDownEndEvent) {
         workerExecutor.executeBlocking(bch -> {
 
             List<VersionController>  versionControllers = repoVersionControllersToRevert(workspace, repository);
@@ -391,25 +419,45 @@ public class WorkspaceVerticle extends Plugin {
 
         }, false, rh -> {
 
-            if (workspace != null) {
+            String workspaceID = getWorkspaceID(build, workspace);
 
+            if (workspaceID != null) {
                 // Unlock the workspace only if the current build owns it.
-                if (isWorkspaceLockedByBuild(workspace.getID(), build.getID())) {
+                if (isWorkspaceLockedByBuild(workspaceID, build.getID())) {
 
-                    if (activeWorkspaces.containsKey(workspace.getID())) {
-                        activeWorkspaces.remove(workspace.getID());
+                    if (activeWorkspaces.containsKey(workspaceID)) {
+                        activeWorkspaces.remove(workspaceID);
 
                     } else {
-                        logger.error("Unable to unlock workspace: " + workspace.getID());
+                        logger.error("Unable to unlock workspace: " + workspaceID);
                     }
 
                 } else {
-                    logger.warn("Workspace locked by another build: " + workspace.getID());
+                    logger.warn("Workspace locked by another build: " + workspaceID);
                 }
             }
 
             fireTearDownEndEvent(tearDownEndEvent);
         });
+    }
+
+    private String getWorkspaceID(Build build, Workspace workspace) {
+        if (workspace != null) {
+            return workspace.getID();
+
+        } else {
+            String buildID = build.getID();
+
+            for (Map.Entry<String, JsonObject> entry : activeWorkspaces.entrySet()) {
+                JsonObject data = entry.getValue();
+
+                if (data != null && buildID.equals(data.getString(ID))) {
+                    return entry.getKey();
+                }
+            }
+
+            return null;
+        }
     }
 
     private VersionController repoVersionController(Workspace workspace, Repository repository) {
@@ -472,7 +520,7 @@ public class WorkspaceVerticle extends Plugin {
     private List<VersionController> repoVersionControllersToRevert(Workspace workspace, Repository repository) {
         List<VersionController> versionControllers = new ArrayList<>();
 
-        if (repository != null) {
+        if (workspace != null && repository != null) {
             // Only perforce syncs needs corresponding reverts.
             switch (repository.getType()) {
                 case P4:

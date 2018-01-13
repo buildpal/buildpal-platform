@@ -19,11 +19,16 @@ package io.buildpal.core.query;
 import io.buildpal.core.query.operand.Operand;
 import io.buildpal.core.query.operation.BooleanOperation;
 import io.buildpal.core.query.operation.DoubleOperation;
+import io.buildpal.core.query.operation.InstantOperation;
 import io.buildpal.core.query.operation.LongOperation;
 import io.buildpal.core.query.operation.NullOperation;
 import io.buildpal.core.query.operation.Operation;
 import io.buildpal.core.query.operation.StringOperation;
 import io.vertx.core.json.JsonObject;
+
+import java.time.Instant;
+
+import static java.time.format.DateTimeFormatter.ISO_INSTANT;
 
 class QueryEvaluator extends QueryBaseVisitor<Boolean> {
 
@@ -157,9 +162,12 @@ class QueryEvaluator extends QueryBaseVisitor<Boolean> {
     public Boolean visitString(QueryParser.StringContext ctx) {
         currentOperation = StringOperation.SELF;
 
+        String text = ctx.getText();
+
         // Remove quotes. At a minimum the string length will be 2 (two quotes).
-        if (ctx.getText().length() > 2) {
-            rightOperand.setStrValue(ctx.getText().substring(1, ctx.getText().length() - 1));
+        if (text.length() > 2) {
+            rightOperand.setStrValue(text.substring(1, text.length() - 1));
+
         } else {
             rightOperand.setStrValue("");
         }
@@ -178,6 +186,22 @@ class QueryEvaluator extends QueryBaseVisitor<Boolean> {
     public Boolean visitLong(QueryParser.LongContext ctx) {
         currentOperation = LongOperation.SELF;
         rightOperand.setLongValue(Long.parseLong(ctx.getText()));
+        return true;
+    }
+
+    @Override
+    public Boolean visitInstant(QueryParser.InstantContext ctx) {
+        currentOperation = InstantOperation.SELF;
+
+        String text = ctx.getText();
+
+        // Remove the leading "i" and quotes.
+        if (text.length() > 3) {
+            text = text.substring(2, text.length() - 1);
+
+            rightOperand.setInstantValue(Instant.from(ISO_INSTANT.parse(text)));
+        }
+
         return true;
     }
 }

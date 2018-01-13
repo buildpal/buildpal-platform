@@ -122,7 +122,7 @@ public class PipelineRouter extends CrudRouter<Pipeline> {
 
     private void saveAndStartInstance(Build build, String script, RoutingContext routingContext) {
 
-        vertx.eventBus().<JsonObject>send(BuildRouter.ADD, build.json(), options(routingContext), reply -> {
+        vertx.eventBus().<JsonObject>send(BuildRouter.ADD_ADDRESS, build.json(), options(routingContext), reply -> {
             if (msgFailed(reply)) {
                 logger.error("Unable to start pipeline instance", reply.cause());
 
