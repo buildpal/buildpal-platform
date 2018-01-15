@@ -11,7 +11,7 @@ Buildpal runs on docker and co-ordinates builds by spinning additional container
 Assuming you have docker installed, run the following command for a quick start:
 ```bash
 docker volume create buildpal-data && \
-docker run -d --name buildpal -v /var/run/docker.sock:/var/run/docker.sock -v buildpal-data:/buildpal/data -p 8080:8080 buildpal/buildpal
+docker run -d --name buildpal -v /var/run/docker.sock:/var/run/docker.sock -v buildpal-data:/buildpal/data -p 8080:8080 -p 55555:55555 buildpal/buildpal
 ```
 The initial admin password gets printed to the console. Look at the log by running the following command:
 ```bash
@@ -36,7 +36,7 @@ To start contributing, do the following:
 * Buildal uses gradle. You can compile the code by running the gradle wrapper "gradlew.[sh|bat] clean build"
 
 ## License
-Copyright 2017 Uday Tatiraju and Mady Mantha
+Copyright 2018 Uday Tatiraju and Mady Mantha
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
