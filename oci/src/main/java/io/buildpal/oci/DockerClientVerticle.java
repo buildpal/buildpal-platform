@@ -34,6 +34,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpVersion;
 import io.vertx.core.json.JsonArray;
@@ -117,7 +118,11 @@ public class DockerClientVerticle extends Plugin {
 
         HttpClientOptions clientOptions = new HttpClientOptions()
                 .setProtocolVersion(HttpVersion.HTTP_1_1_UNIX)
-                .setDefaultHost("/var/run/docker.sock");
+                .setDefaultHost("/var/run/docker.sock")
+                .setReusePort(null)
+                .setReuseAddress(null)
+                .setTcpKeepAlive(null)
+                .setTcpNoDelay(null);
 
         dockerClient = vertx.createHttpClient(clientOptions);
     }
@@ -131,7 +136,9 @@ public class DockerClientVerticle extends Plugin {
         host = Constants.getDockerVerticleHostOrIP(config(), "localhost");
         httpPort = Constants.getDockerVerticleHttpPort(config(), 50001);
 
-        vertx.createHttpServer()
+        HttpServerOptions serverOptions = new HttpServerOptions().setReusePort(null);
+
+        vertx.createHttpServer(serverOptions)
                 .requestHandler(httpLogHandler())
                 .listen(httpPort, res -> startFuture.complete());
     }

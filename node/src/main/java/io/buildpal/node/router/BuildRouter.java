@@ -24,6 +24,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
@@ -68,7 +69,7 @@ public class BuildRouter extends CrudRouter<Build> {
     public BuildRouter(Vertx vertx, JWTAuth jwtAuth, List<String> authorities, DbManager dbManager) {
         super(vertx, logger, jwtAuth, authorities, dbManager, Build::new);
 
-        containerLogsClient = vertx.createHttpClient();
+        containerLogsClient = vertx.createHttpClient(new HttpClientOptions().setReusePort(null));
     }
 
     @Override
