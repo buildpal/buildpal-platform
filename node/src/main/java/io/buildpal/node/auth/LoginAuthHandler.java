@@ -23,7 +23,6 @@ import io.buildpal.auth.vault.VaultService;
 import io.buildpal.core.config.Constants;
 import io.buildpal.core.domain.Entity;
 import io.buildpal.core.domain.User;
-import io.buildpal.core.query.QuerySpec;
 import io.buildpal.core.util.VertxUtils;
 import io.buildpal.db.file.UserManager;
 import io.buildpal.node.router.BaseRouter;
@@ -32,25 +31,23 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.auth.jwt.JWTAuth;
+import io.vertx.ext.jwt.JWTOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.List;
-
 import static io.buildpal.auth.util.AuthConfigUtils.isLdapEnabled;
 import static io.buildpal.core.util.ResultUtils.failed;
-import static io.buildpal.core.util.ResultUtils.getEntities;
+import static io.buildpal.core.util.ResultUtils.getEntity;
 
 public class LoginAuthHandler implements Handler<RoutingContext> {
     private static final Logger logger = LoggerFactory.getLogger(LoginAuthHandler.class);
 
     private static final String ACCESS_TOKEN = "access_token";
-
-    private static final String USERNAME_QUERY = "username eq \"%s\"";
 
     private final JWTAuth jwtAuth;
     private final UserManager userManager;
@@ -94,18 +91,16 @@ public class LoginAuthHandler implements Handler<RoutingContext> {
     }
 
     private void checkUserInDB(User user, RoutingContext context) {
-        QuerySpec querySpec = new QuerySpec()
-                .setQuery(String.format(USERNAME_QUERY, user.getUserName()));
 
-        userManager.find(querySpec, fh -> {
-            if (failed(fh)) {
+        userManager.get(user.getUserName(), gh -> {
+            if (gh.failed()) {
                 fail(user.getUserName(), context);
 
             } else {
-                List<JsonObject> items = getEntities(fh.result());
+                JsonObject item = getEntity(gh.result());
 
-                if (items.size() == 1) {
-                    user.merge(items.get(0));
+                if (item != null) {
+                    user.merge(item);
 
                     authenticate(user, context);
 
@@ -134,7 +129,7 @@ public class LoginAuthHandler implements Handler<RoutingContext> {
                 } else {
                     // TODO: Check OTP and redirect.
                     // All good. Send JWT.
-                    BaseRouter.writeResponse(context, generateJWT(user.getUserName()));
+                    BaseRouter.writeResponse(context, generateJWT(user));
                 }
 
             } else {
@@ -155,20 +150,27 @@ public class LoginAuthHandler implements Handler<RoutingContext> {
 
             } else {
                 // All good. Send JWT.
-                BaseRouter.writeResponse(context, generateJWT(user.getUserName()));
+                BaseRouter.writeResponse(context, generateJWT(user));
             }
         });
     }
 
-    private JsonObject generateJWT(String username) {
-        JsonObject options = new JsonObject()
-                .put(Entity.ID, username)
-                .put(Constants.SUBJECT, username);
+    private JsonObject generateJWT(User user) {
+        JsonObject claims = new JsonObject()
+                .put(Entity.ID, user.getID())
+                .put(Constants.SUBJECT, user.getID());
+
+        JWTOptions extraOptions = new JWTOptions();
+
+        JsonArray roles = user.getRoles();
+        if (roles != null) {
+            roles.forEach(role -> extraOptions.addPermission((String) role));
+        }
 
         // Generate jwt.
         return new JsonObject()
-                .put(Entity.ID, username)
-                .put(ACCESS_TOKEN, jwtAuth.generateToken(options));
+                .put(Entity.ID, user.getID())
+                .put(ACCESS_TOKEN, jwtAuth.generateToken(claims, extraOptions));
     }
 
     private void fail(String userName, RoutingContext context) {

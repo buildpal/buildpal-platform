@@ -49,42 +49,43 @@ public class UserManager extends FileDbManager {
     @Override
     void save(JsonObject entity, boolean isAdd, JsonObject result, Future<JsonObject> future) {
 
-        User user = isAdd ? new User(entity) : new User(get(entity.getString(ID)));
+        User user = new User(entity);
 
         if (user.getType() == User.Type.LOCAL) {
-            saveLocalUser(isAdd, entity, user, result, future);
+            saveUserHash(isAdd, user, result, future);
 
         } else {
-            saveUser(user, result, future);
+            saveToFile(user.json(), result, future);
         }
     }
 
-    private void saveLocalUser(boolean isAdd, JsonObject entity, User user,
-                               JsonObject result, Future<JsonObject> future) {
-        if (isAdd) {
+    private void saveUserHash(boolean isAdd, User user, JsonObject result, Future<JsonObject> future) {
+
+        boolean saveToVault = false;
+
+        if (isAdd || user.json().containsKey(PASSWORD)) {
             user.setSalt(Utils.newID().getBytes());
-
-        } else {
-            // NOTE: Only pwd and salt can be updated for a user.
-            user.setPassword(entity.getString(PASSWORD))
-                    .setSalt(Utils.newID().getBytes());
+            saveToVault = true;
         }
 
-        vaultService.save(user.getUserName(), user.getPassword(), user.getSalt(), sh -> {
-            user.clearPassword();
+        if (saveToVault) {
+            // Add or update the hash in the vault.
+            vaultService.save(user.getUserName(), user.getPassword(), user.getSalt(), sh -> {
+                // No need to store the pass in the clear.
+                user.clearPassword();
 
-            if (sh.succeeded()) {
-                saveToFile(user.json(), result, future);
+                if (sh.succeeded()) {
+                    saveToFile(user.json(), result, future);
 
-            } else {
-                String message = "Unable to save hash for user: " + user.getName();
-                future.complete(addError(result, message));
-                logger.error(message, sh.cause());
-            }
-        });
-    }
+                } else {
+                    String message = "Unable to save hash for user: " + user.getName();
+                    future.complete(addError(result, message));
+                    logger.error(message, sh.cause());
+                }
+            });
 
-    private void saveUser(User user, JsonObject result, Future<JsonObject> future) {
-        saveToFile(user.json(), result, future);
+        } else {
+            saveToFile(user.json(), result, future);
+        }
     }
 }

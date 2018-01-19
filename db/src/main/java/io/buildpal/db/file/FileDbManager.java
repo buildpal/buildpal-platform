@@ -207,6 +207,14 @@ public abstract class FileDbManager implements DbManager {
         future.complete(result);
     }
 
+    @Override
+    public List<JsonObject> list() {
+        List<JsonObject> items = new ArrayList<>();
+        collectionMap.keySet().forEach(k -> items.add(collectionMap.get(k)));
+
+        return items;
+    }
+
     String getID(JsonObject entity) {
         return entity.getString(ID);
     }

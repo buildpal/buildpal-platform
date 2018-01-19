@@ -23,6 +23,7 @@ module io.buildpal.node {
 
     requires vertx.core;
     requires vertx.auth.common;
+    requires vertx.jwt;
     requires vertx.auth.jwt;
     requires vertx.web;
 

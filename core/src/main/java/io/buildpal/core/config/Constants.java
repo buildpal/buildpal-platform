@@ -51,6 +51,8 @@ public class Constants {
     public static final String BUILD_UPDATE_ADDRESS = "build.update";
     public static final String DELETE_CONTAINERS_ADDRESS = "oci.containers.delete";
     public static final String KILL_CONTAINERS_ADDRESS = "oci.containers.kill";
+    public static final String SAVE_USER_AFFINITY_ADDRESS = "user.affinity.save";
+    public static final String DELETE_WORKSPACE_ADDRESS = "workspace.delete";
 
     public final static String BUILDPAL_DATA_VOLUME = "buildpal-data";
 

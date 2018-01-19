@@ -16,10 +16,14 @@
 
 package io.buildpal.core.domain;
 
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import static io.buildpal.core.config.Constants.ADMIN;
 import static io.buildpal.core.config.Constants.SALT;
@@ -31,10 +35,12 @@ public class User extends Entity<User> {
         LDAP
     }
 
-    private static final String OTP = "otp";
-
     public static final String USERNAME = "username";
     public static final String PASSWORD = "password";
+
+    private static final String ROLES = "roles";
+    private static final String OTP = "otp";
+    private static final String NODE_AFFINITY = "nodeAffinity";
 
     public User() {
         super();
@@ -97,6 +103,32 @@ public class User extends Entity<User> {
         return this;
     }
 
+    public JsonArray getRoles() {
+        return jsonObject.getJsonArray(ROLES);
+    }
+
+    @SuppressWarnings("unchecked")
+    public User addRole(String role) {
+        JsonArray rolesJson = getRoles();
+
+        if (rolesJson == null || rolesJson.isEmpty()) {
+            jsonObject.put(ROLES, new JsonArray().add(role));
+
+        } else {
+            Set<String> roles = new HashSet<>(rolesJson.getList());
+            roles.add(role);
+
+            final JsonArray newRolesJson = new JsonArray();
+
+            roles.forEach(newRolesJson::add);
+
+            // Finally, add the unique roles.
+            jsonObject.put(ROLES, newRolesJson);
+        }
+
+        return this;
+    }
+
     public byte[] getSalt() {
         return jsonObject.getBinary(SALT);
     }
@@ -115,9 +147,40 @@ public class User extends Entity<User> {
         return this;
     }
 
-    public static User newLocalUser(String userName, String password) {
+    public JsonArray getNodeAffinity() {
+        return jsonObject.getJsonArray(NODE_AFFINITY);
+    }
+
+    @SuppressWarnings("unchecked")
+    public User addNodeAffinity(String node) {
+        JsonArray nodeAffinity = getNodeAffinity();
+
+        if (nodeAffinity == null || nodeAffinity.isEmpty()) {
+            jsonObject.put(NODE_AFFINITY, new JsonArray().add(node));
+
+        } else {
+            Set<String> nodes = new HashSet<>(nodeAffinity.getList());
+            nodes.add(node);
+
+            final JsonArray newNodeAffinity = new JsonArray();
+
+            nodes.forEach(newNodeAffinity::add);
+
+            // Finally, add the unique nodes.
+            jsonObject.put(NODE_AFFINITY, newNodeAffinity);
+        }
+
+        return this;
+    }
+
+    public User clearNodeAffinity() {
+        jsonObject.remove(NODE_AFFINITY);
+        return this;
+    }
+
+    public static User newLocalUser(String userName, String password, String role) {
         User user = new User(userName, password)
-                .setOTP(true);
+                .addRole(role);
 
         return normalize(user, ADMIN);
     }

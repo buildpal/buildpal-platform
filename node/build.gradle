@@ -2,6 +2,7 @@ javaModule.name = "io.buildpal.node"
 
 dependencies {
     implementation "io.vertx:vertx-auth-jwt:$vertxVersion"
+    implementation "io.vertx:vertx-jwt:$vertxVersion"
     implementation "io.vertx:vertx-web:$vertxVersion"
     implementation "io.vertx:vertx-zookeeper:$vertxVersion"
 

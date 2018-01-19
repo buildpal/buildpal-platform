@@ -25,7 +25,8 @@ public class DataItem extends Entity<DataItem> {
 
     public static final String DEFAULT_VALUE = "defaultValue";
 
-    private static final String VALUE = "value";
+    static final String VALUE = "value";
+
     private static final String DATA_KEY = "${data.%s}";
 
     public enum Type {

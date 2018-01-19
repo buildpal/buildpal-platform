@@ -31,6 +31,7 @@ public class Event {
     private static final String STAGES = "stages";
     private static final String STATUS_CODE = "statusCode";
     private static final String STATUS_MESSAGE = "statusMessage";
+    private static final String CHILD_REPOSITORY = "childRepository";
 
     protected JsonObject jsonObject;
 
@@ -103,6 +104,26 @@ public class Event {
         return jsonObject.containsKey(Repository.REPOSITORY);
     }
 
+    public Repository getChildRepository() {
+        JsonObject repository = jsonObject.getJsonObject(CHILD_REPOSITORY);
+
+        if (repository == null) return null;
+
+        return new Repository(repository);
+    }
+
+    public Event setChildRepository(Repository childRepository) {
+        if (childRepository != null) {
+            jsonObject.put(CHILD_REPOSITORY, childRepository.json());
+        }
+
+        return this;
+    }
+
+    public boolean hasChildRepository() {
+        return jsonObject.containsKey(CHILD_REPOSITORY);
+    }
+
     public Phase getPhase() {
         JsonObject currentPhase = jsonObject.getJsonObject(PHASE);
 
@@ -114,10 +135,6 @@ public class Event {
     public Event setPhase(Phase currentPhase) {
         jsonObject.put(PHASE, currentPhase.json());
         return this;
-    }
-
-    public boolean hasPhase() {
-        return jsonObject.containsKey(PHASE);
     }
 
     public JsonArray getStages() {

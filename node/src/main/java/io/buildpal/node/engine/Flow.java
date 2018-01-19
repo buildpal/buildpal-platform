@@ -112,7 +112,9 @@ class Flow implements Shareable {
         build.setStatus(Status.IN_FLIGHT);
         process(null);
 
-        logger.info("Pipeline instance started: " + build.getID());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Pipeline instance started: " + build.getID());
+        }
     }
 
     public List<String> abort() {
@@ -124,7 +126,9 @@ class Flow implements Shareable {
         aborted = true;
         List<String> containerIDs = build.markForAbort();
 
-        logger.info("Pipeline instance aborted: " + build.getID());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Pipeline instance aborted: " + build.getID());
+        }
 
         return containerIDs;
     }
@@ -340,8 +344,11 @@ class Flow implements Shareable {
     }
 
     private boolean updateBuildFromPhaseEvent(Event event, Phase eventPhase, Phase stagePhase) {
-        if (event.hasRepository()) {
-            build.setRepository(event.getRepository());
+        // If possible, always update the child repository.
+        if (event.hasChildRepository()) {
+            // The plugin can update the repo's metadata.
+            build.getRepository()
+                    .updateChildRepository(event.getChildRepository());
         }
 
         if (event.getStatusCode() == 200) {

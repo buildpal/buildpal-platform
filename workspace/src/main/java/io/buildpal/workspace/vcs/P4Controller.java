@@ -130,6 +130,12 @@ public class P4Controller extends BaseVersionController {
     private void sync(IOptionsServer server, String clientName, JsonObject data) throws Exception {
         String[] viewMappings = repository.viewMappings(clientName);
 
+        if (viewMappings != null) {
+            for (int v=0; v<viewMappings.length; v++) {
+                viewMappings[v] = DataUtils.eval(viewMappings[v], data);
+            }
+        }
+
         IClient client = Client.newClient(server, clientName, null, workspace.getPath(), viewMappings);
         server.createClient(client);
         server.setCurrentClient(client);

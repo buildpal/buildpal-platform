@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import static io.buildpal.core.domain.DataItem.VALUE;
 import static io.buildpal.core.domain.Phase.CONTAINER_HOST;
 import static io.buildpal.core.domain.Phase.CONTAINER_ID;
 import static io.buildpal.core.domain.Phase.CONTAINER_PORT;
@@ -110,6 +111,16 @@ public class Build extends Entity<Build> {
 
     public JsonObject data() {
         return jsonObject.containsKey(DATA) ? jsonObject.getJsonObject(DATA) : new JsonObject();
+    }
+
+    public JsonObject compressedData() {
+        JsonObject compressed = new JsonObject();
+        JsonObject data = data();
+
+        data.fieldNames()
+                .forEach(key -> compressed.put(key, data.getJsonObject(key).getString(VALUE)));
+
+        return compressed;
     }
 
     public Build setData(JsonObject rawData, List<DataItem> dataList) {

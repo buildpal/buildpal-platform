@@ -35,6 +35,8 @@ import io.buildpal.node.router.CrudRouter;
 import io.buildpal.node.router.PipelineRouter;
 import io.buildpal.node.router.SecretRouter;
 import io.buildpal.node.router.StaticRouter;
+import io.buildpal.node.router.UserRouter;
+import io.buildpal.node.router.WorkspaceRouter;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Verticle;
@@ -214,6 +216,12 @@ public class Node extends AbstractVerticle {
         mainRouter.mountSubRouter(API_PATH,
                 new BuildRouter(vertx, jwtAuth, null, dbManagers.getBuildManager())
                         .getRouter());
+
+        mainRouter.mountSubRouter(API_PATH,
+                new UserRouter(vertx, jwtAuth, List.of(ADMIN), dbManagers.getUserManager())
+                        .getRouter());
+
+        mainRouter.mountSubRouter(API_PATH, new WorkspaceRouter(vertx, jwtAuth).getRouter());
     }
 
     private void configureStaticFiles() {
@@ -229,7 +237,7 @@ public class Node extends AbstractVerticle {
         if (userJson == null) {
             String tmp = Utils.newID();
 
-            User adminUser = User.newLocalUser(ADMIN, tmp);
+            User adminUser = User.newLocalUser(ADMIN, tmp, ADMIN);
 
             // admin ID is "admin"
             adminUser.setID(ADMIN);

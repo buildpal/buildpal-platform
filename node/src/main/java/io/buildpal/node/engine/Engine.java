@@ -30,6 +30,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.core.shareddata.LocalMap;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,12 +40,16 @@ import java.util.ServiceLoader;
 
 import static io.buildpal.core.config.Constants.DELETE_CONTAINERS_ADDRESS;
 import static io.buildpal.core.config.Constants.KILL_CONTAINERS_ADDRESS;
+import static io.buildpal.core.config.Constants.NODE;
+import static io.buildpal.core.config.Constants.SAVE_USER_AFFINITY_ADDRESS;
+import static io.buildpal.core.domain.Entity.ID;
 import static io.buildpal.core.util.ResultUtils.newEntity;
 import static io.buildpal.node.engine.Flow.END;
 
 public class Engine extends AbstractVerticle {
     private final static Logger logger = LoggerFactory.getLogger(Engine.class);
 
+    public static final String START_ON_NODE = "%s:pipeline.instance.start";
     public static final String START = "pipeline.instance.start";
     public static final String ABORT = "pipeline.instance.abort";
     public static final String DELETE = "pipeline.instance.delete";
@@ -53,11 +58,23 @@ public class Engine extends AbstractVerticle {
     private List<Plugin> tearDownPlugins;
     private List<Plugin> phasePlugins;
 
+    private String publicFQDN;
+
     private LocalMap<String, Flow> currentFlows;
 
     @Override
     public void start(Future<Void> startFuture) {
         try {
+            publicFQDN = System.getenv("PUBLIC_FQDN");
+
+            if (StringUtils.isBlank(publicFQDN)) {
+                startFuture.fail("PUBLIC_FQDN environment variable should be set");
+            }
+
+            if ("localhost".equals(publicFQDN)) {
+                logger.warn("PUBLIC_FQDN environment variable set to 'localhost'. Clustering, if enabled, may fail.");
+            }
+
             currentFlows = vertx.sharedData().getLocalMap("currentFlows");
 
             registerPipelineHandlers();
@@ -72,15 +89,8 @@ public class Engine extends AbstractVerticle {
     }
 
     private void registerPipelineHandlers() {
-
-        vertx.eventBus().<JsonObject>consumer(START, mh -> {
-            // Received a request to start the build.
-            // Start the pipeline flow.
-            Flow flow = new Flow(mh.body(), setupPlugins, tearDownPlugins, phasePlugins, vertx.eventBus());
-            currentFlows.put(flow.getBuild().getID(), flow);
-
-            flow.start();
-        });
+        vertx.eventBus().consumer(START, startHandler());
+        vertx.eventBus().consumer(String.format(START_ON_NODE, publicFQDN), startHandler());
 
         vertx.eventBus().<JsonObject>consumer(DELETE, mh -> {
             // Received a request to delete the build.
@@ -121,8 +131,26 @@ public class Engine extends AbstractVerticle {
             Build build = new Build(mh.body());
             currentFlows.remove(build.getID());
 
-            logger.info("Flow processed and removed from the queue: " + build.getID());
+            if (logger.isDebugEnabled()) {
+                logger.debug("Flow processed and removed from the queue: " + build.getID());
+            }
         });
+    }
+
+    private Handler<Message<JsonObject>> startHandler() {
+        return mh -> {
+            // Received a request to start the build.
+            // Start the pipeline flow.
+            Flow flow = new Flow(mh.body(), setupPlugins, tearDownPlugins, phasePlugins, vertx.eventBus());
+            currentFlows.put(flow.getBuild().getID(), flow);
+
+            flow.start();
+
+            vertx.eventBus().send(SAVE_USER_AFFINITY_ADDRESS,
+                    new JsonObject()
+                            .put(ID, flow.getBuild().getCreatedBy())
+                            .put(NODE, publicFQDN));
+        };
     }
 
     private Handler<Message<JsonObject>> flowHandler() {

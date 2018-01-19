@@ -21,6 +21,8 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonObject;
 
+import java.util.List;
+
 public interface DbManager {
     String getCollectionName();
 
@@ -39,4 +41,6 @@ public interface DbManager {
     void delete(String id, Handler<AsyncResult<JsonObject>> handler);
 
     void find(QuerySpec querySpec, Handler<AsyncResult<JsonObject>> handler);
+
+    List<JsonObject> list();
 }

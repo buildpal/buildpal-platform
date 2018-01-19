@@ -27,8 +27,6 @@ import io.buildpal.core.pipeline.event.Event;
 import io.buildpal.core.pipeline.event.EventKey;
 import io.buildpal.core.process.ExternalProcess;
 import io.buildpal.core.util.FileUtils;
-import io.buildpal.workspace.vcs.GitController;
-import io.buildpal.workspace.vcs.P4Controller;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -85,7 +83,7 @@ public class ScriptVerticle extends Plugin {
 
     @Override
     public Set<CommandKey> commandKeysToRegister() {
-        return Set.of(CommandKey.SETUP);
+        return Set.of(CommandKey.SETUP, CommandKey.RUN_PHASE);
     }
 
     @Override
@@ -147,8 +145,67 @@ public class ScriptVerticle extends Plugin {
         };
     }
 
+    @Override
+    protected Handler<Message<JsonObject>> phaseHandler(EventBus eb) {
+        return mh -> {
+            Command command = new Command(mh.body());
+            Build build = command.getBuild();
+            Phase phase = command.getPhase();
+
+            Event phaseEndEvent = new Event()
+                    .setKey(EventKey.PHASE_END)
+                    .setBuildID(build.getID())
+                    .setPhase(phase);
+
+            if (phase.hasPreScript()) {
+                runPreScript(build, phase, phaseEndEvent);
+
+            } else {
+                firePhaseEndEvent(phaseEndEvent);
+            }
+        };
+    }
+
+    private void runPreScript(Build build, Phase phase, Event phaseEndEvent) {
+        String phasesPath = build.getWorkspace().getPhasesPath();
+
+        // Run on the worker pool since the time to run the script is not predictable.
+        workerExecutor.executeBlocking(bch -> {
+
+            try {
+                ExternalProcess process = new ExternalProcess()
+                        .inDirectory(phasesPath)
+                        .withCommand(String.format(DOT_SLASH, phase.getPreScriptFile()));
+
+                int exitCode = process.run();
+
+                if (exitCode == 0) {
+                    bch.complete();
+
+                } else {
+                    bch.fail(new Exception(String.format("Unable to run pre-phase (%d): %s", exitCode, phase.getPreScriptFile())));
+                }
+
+            } catch (Exception ex) {
+                logger.error("Unable to run pre-phase: " + phase.getPreScriptFile(), ex);
+                bch.fail(ex);
+            }
+
+        }, false, rfh -> {
+            if (rfh.failed()) {
+                phaseEndEvent.setStatusCode(500).setStatusMessage(rfh.cause().getMessage());
+            }
+
+            firePhaseEndEvent(phaseEndEvent);
+        });
+    }
+
     private void fireSetupEndEvent(Event setupEndEvent) {
         vertx.eventBus().send(setupEndEvent.getKey().getAddress(), setupEndEvent.json());
+    }
+
+    private void firePhaseEndEvent(Event phaseEndEvent) {
+        vertx.eventBus().send(EventKey.PHASE_END.getAddress(), phaseEndEvent.json());
     }
 
     private void scanScript(Build build, Event setupEndEvent) {
@@ -242,6 +299,10 @@ public class ScriptVerticle extends Plugin {
 
                     if (dryRunSuccess) {
                         setupEndEvent.setStages(msg.getJsonArray("_stages", EMPTY_ARRAY));
+
+                        // NOTE: We are going to delete the js verticle file only when the dry run was successful.
+                        vertx.fileSystem().delete(fullScriptPath, deleteScriptFileHandler -> {});
+
                         processScripts(build, setupEndEvent);
 
                     } else {
@@ -294,29 +355,10 @@ public class ScriptVerticle extends Plugin {
 
         CompositeFuture.all(writePreScriptFutures).setHandler(wpsh -> {
             if (wpsh.succeeded()) {
-                runPreScripts(allPhases, phasesPath, build, setupEndEvent);
-
-            } else {
-                error(build, setupEndEvent, wpsh.cause());
-            }
-        });
-    }
-
-    private void runPreScripts(List<Phase> allPhases, String phasesPath, Build build, Event setupEndEvent) {
-        List<Future> runPreScriptFutures = new ArrayList<>();
-
-        for (Phase phase : allPhases) {
-            if (phase.hasPreScript()) {
-                runPreScriptFutures.add(runFile(phasesPath, phase.getPreScriptFile()));
-            }
-        }
-
-        CompositeFuture.all(runPreScriptFutures).setHandler(rpsh -> {
-            if (rpsh.succeeded()) {
                 createMainScripts(allPhases, phasesPath, build, setupEndEvent);
 
             } else {
-                error(build, setupEndEvent, rpsh.cause());
+                error(build, setupEndEvent, wpsh.cause());
             }
         });
     }
@@ -374,36 +416,6 @@ public class ScriptVerticle extends Plugin {
         return writeFileFuture;
     }
 
-    private Future<Void> runFile(String parentPath, String fileName) {
-        Future<Void> runFileFuture = Future.future();
-
-        // Run on the worker pool since the time to run the script is not predictable.
-        workerExecutor.executeBlocking(bch -> {
-            try {
-
-                ExternalProcess process = new ExternalProcess()
-                        .inDirectory(parentPath)
-                        .withCommand(String.format(DOT_SLASH, fileName));
-
-                int exitCode = process.run();
-
-                if (exitCode == 0) {
-                    bch.complete();
-
-                } else {
-                    bch.fail(new Exception(String.format("Unable to run pre-phase (%d): %s", exitCode, fileName)));
-                }
-
-            } catch (Exception ex) {
-                logger.error("Unable to run pre-phase: " + fileName, ex);
-                bch.fail(ex);
-            }
-
-        }, false, runFileFuture.completer());
-
-        return runFileFuture;
-    }
-
     private List<Phase> getAllPhases(Event setupEndEvent) {
         List<Phase> allPhases = new ArrayList<>();
         JsonArray stages = setupEndEvent.getStages();
@@ -442,7 +454,7 @@ public class ScriptVerticle extends Plugin {
     }
 
     private String varData(Build build) {
-        return "var data = JSON.parse('" + build.data().encode() + "');" + NEW_LINE;
+        return "var data = JSON.parse('" + build.compressedData().encode() + "');" + NEW_LINE;
     }
 
     private void error(Build build, Event event, Throwable cause) {

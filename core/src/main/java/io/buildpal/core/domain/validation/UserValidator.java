@@ -21,6 +21,8 @@ import io.buildpal.core.domain.User;
 import java.util.ArrayList;
 import java.util.List;
 
+import static io.buildpal.core.domain.User.PASSWORD;
+
 public class UserValidator extends BasicValidator<User> {
 
     public UserValidator() {
@@ -55,9 +57,10 @@ public class UserValidator extends BasicValidator<User> {
         User.Type type = entity.getType();
         validateObject(errors, type, "Specify a type.");
 
-        if (type == User.Type.LOCAL) {
+        if (type == User.Type.LOCAL && entity.json().containsKey(PASSWORD)) {
             // TODO: Add more pwd validation.
-            validateString(errors, entity.getPassword(), "Specify a password", 8);
+            validateString(errors, entity.getPassword(),
+                    "Specify a password with 8 or more alphanumeric characters", 8);
         }
 
         return errors;

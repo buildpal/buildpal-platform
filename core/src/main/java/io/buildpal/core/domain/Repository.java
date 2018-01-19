@@ -213,6 +213,28 @@ public class Repository extends Entity<Repository> {
         return jsonObject.getJsonArray(CHILDREN);
     }
 
+    public Repository updateChildRepository(Repository childRepository) {
+        if (childRepository.hasMetadata()) {
+            Repository.Type type = getType();
+
+            if (type == Repository.Type.MULTI_GIT || type == Repository.Type.MULTI_P4) {
+                JsonArray children = getChildren();
+
+                for (int c = 0; c < children.size(); c++) {
+                    Repository child = new Repository(children.getJsonObject(c));
+
+                    if (childRepository.getName().equalsIgnoreCase(child.getName())) {
+                        child.setMetadata(childRepository.getMetadata());
+
+                        return this;
+                    }
+                }
+            }
+        }
+
+        return this;
+    }
+
     public boolean isPipelineScanOn() {
         return jsonObject.getBoolean(PIPELINE_SCAN_ON, false);
     }
@@ -241,5 +263,9 @@ public class Repository extends Entity<Repository> {
         }
 
         return this;
+    }
+
+    private boolean hasMetadata() {
+        return jsonObject.containsKey(METADATA) && StringUtils.isNotBlank(getMetadata());
     }
 }

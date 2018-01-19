@@ -21,6 +21,7 @@ import io.buildpal.core.domain.Pipeline;
 import io.buildpal.core.domain.PipelineJs;
 import io.buildpal.core.domain.Status;
 import io.buildpal.db.file.PipelineManager;
+import io.buildpal.node.data.NodeTracker;
 import io.buildpal.node.engine.Engine;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.DeliveryOptions;
@@ -30,6 +31,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.web.RoutingContext;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,9 +39,11 @@ import java.util.List;
 import static io.buildpal.core.config.Constants.ITEM;
 import static io.buildpal.core.config.Constants.SUBJECT;
 import static io.buildpal.core.domain.Build.BUILD;
+import static io.buildpal.core.domain.Entity.CREATED_BY;
 import static io.buildpal.core.domain.Pipeline.JS;
 import static io.buildpal.core.util.ResultUtils.failed;
 import static io.buildpal.core.util.ResultUtils.msgFailed;
+import static io.buildpal.node.engine.Engine.START_ON_NODE;
 
 public class PipelineRouter extends CrudRouter<Pipeline> {
     private static final Logger logger = LoggerFactory.getLogger(PipelineRouter.class);
@@ -127,12 +131,19 @@ public class PipelineRouter extends CrudRouter<Pipeline> {
                 logger.error("Unable to start pipeline instance", reply.cause());
 
             } else {
-                // Asynchronously start the instance.
+                JsonObject buildJson = reply.result().body().getJsonObject(ITEM);
+
                 JsonObject engineMessage = new JsonObject()
-                        .put(BUILD,reply.result().body().getJsonObject(ITEM))
+                        .put(BUILD, buildJson)
                         .put(SCRIPT, script);
 
-                vertx.eventBus().send(Engine.START, engineMessage);
+                // See if user has node affinity.
+                String node = NodeTracker.ME.getNode(buildJson.getString(CREATED_BY));
+                String address = StringUtils.isBlank(node) ?
+                        Engine.START : String.format(START_ON_NODE, node);
+
+                // Asynchronously start the instance.
+                vertx.eventBus().send(address, engineMessage);
             }
 
             writeResponse(routingContext, reply.result().body());

@@ -15,6 +15,7 @@ import io.buildpal.workspace.vcs.GitController;
 import io.buildpal.workspace.vcs.P4Controller;
 import io.buildpal.workspace.vcs.SyncResult;
 import io.buildpal.workspace.vcs.VersionController;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.WorkerExecutor;
 import io.vertx.core.eventbus.EventBus;
@@ -35,6 +36,7 @@ import java.util.Set;
 
 import static io.buildpal.auth.vault.VaultService.RETRIEVE_DATA_ADDRESS;
 import static io.buildpal.core.config.Constants.DATA_FOLDER_PATH;
+import static io.buildpal.core.config.Constants.DELETE_WORKSPACE_ADDRESS;
 import static io.buildpal.core.domain.Entity.ID;
 import static io.buildpal.core.domain.Entity.NAME;
 import static io.buildpal.core.util.FileUtils.SLASH;
@@ -78,6 +80,13 @@ public class WorkspaceVerticle extends Plugin {
         workerExecutor = vertx.createSharedWorkerExecutor("WORKSPACE-POOL", 5, 7200000000000L);
 
         preparePaths(config());
+    }
+
+    @Override
+    protected void starting(Future<Void> startFuture) {
+        vertx.eventBus().consumer(DELETE_WORKSPACE_ADDRESS, deleteHandler());
+
+        startFuture.complete();
     }
 
     /**
@@ -180,6 +189,21 @@ public class WorkspaceVerticle extends Plugin {
                     .setBuildID(build.getID());
 
             revertWithCreds(build, tearDownEndEvent);
+        };
+    }
+
+    private Handler<Message<JsonObject>> deleteHandler() {
+        return mh -> {
+            String userID = mh.body().getString(ID);
+            String userPath = workspacesRootPath + userID;
+
+            long count = activeWorkspaces.keySet().stream().filter(key -> key.startsWith(userID)).count();
+
+            if (count == 0) {
+                deleteUserWorkspace(userPath);
+            } else {
+                logger.warn("Cannot delete active workspace for user: " + userID);
+            }
         };
     }
 
@@ -367,7 +391,7 @@ public class WorkspaceVerticle extends Plugin {
             }
 
             // Pass the updated repository (updated metadata).
-            phaseEndEvent.setRepository(repository);
+            phaseEndEvent.setChildRepository(childRepo);
 
             firePhaseEndEvent(phaseEndEvent);
         });
@@ -444,6 +468,18 @@ public class WorkspaceVerticle extends Plugin {
             }
 
             fireTearDownEndEvent(tearDownEndEvent);
+        });
+    }
+
+    private void deleteUserWorkspace(String userPath) {
+        vertx.fileSystem().exists(userPath, eh -> {
+            if (eh.result()) {
+                vertx.fileSystem().deleteRecursive(userPath, true, dh-> {
+                    if (dh.failed()) {
+                        logger.error("Unable to delete user workspace: " + userPath, dh.cause());
+                    }
+                });
+            }
         });
     }
 
