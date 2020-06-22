@@ -1,6 +1,6 @@
-# Buildpal - docker native continuous integration server
+# Buildpal - docker/k8s native CI/CD tool
 ## Introduction
-Builpal is an open source continuous integration server with first class support for pipelines. Built on top of the excellent reactive toolkit vertx, Buildpal runs your pipelines on docker containers. Buildpal is a good alternative for folks who prefer code over various configuration files and formats. You define pipelines in JavaScript (Java support is on its way). You can run multiple phases of a pipeline in parallel and cut down on your build times. Your pipeline can also build a docker image as the final outcome of a successful build.  
+Builpal is an open source CI/CD tool with first class support for pipelines. Built on top of the excellent reactive toolkit vertx, Buildpal runs your pipelines on docker containers. Buildpal is a good alternative for folks who prefer code over various configuration files and formats. You define pipelines in JavaScript (Java support is on its way). You can run multiple phases of a pipeline in parallel and cut down on your build times. Your pipeline can also build a docker image as the final outcome of a successful build.  
 
 ## Project status
 This project is currently in experimental stage. We are trying to experiment with the new Java Platform Module System (JPMS) and Vert.x to design and develop a modern, responsive, resilient and message driven continuous integration (CI) system. Git and Perforce are the two currently supported source control systems.
